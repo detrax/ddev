@@ -1,15 +1,72 @@
 ---
 search:
-  boost: 2
+  boost: 3
 ---
 
 # Extending and Customizing Environments
 
 DDEV provides several ways to customize and extend project environments.
 
+## Environment Variables for Containers and Services
+
+You can set custom environment variables in several places:
+
+1. An optional, project-level `.ddev/.env` file provides environment variables to all DDEV containers, including any additional services or add-ons. It can look something like this:
+
+    ```
+    MY_ENV_VAR='someval'
+    MY_OTHER_ENV_VAR='someotherval'
+    ```
+
+2. The global `web_environment` setting in `.ddev/global_config.yaml`.
+
+    ```yaml
+    web_environment:
+    - MY_ENV_VAR=someval
+    - MY_OTHER_ENV_VAR=someotherval
+    ```
+
+3. The project’s [`web_environment`](../configuration/config.md#web_environment) setting in `.ddev/config.yaml` or `.ddev/config.*.yaml`:
+
+    ```yaml
+    web_environment:
+    - MY_ENV_VAR=someval
+    - MY_OTHER_ENV_VAR=someotherval
+    ```
+
+If you’d rather use the CLI to set the project or global `web_environment` value, you can use the [`ddev config`](../usage/commands.md#config) command:
+
+```sh
+# Set MY_ENV_VAR for the project
+ddev config --web-environment-add="MY_ENV_VAR=someval"
+
+# Set MY_ENV_VAR globally
+ddev config global --web-environment-add="MY_ENV_VAR=someval"
+```
+
+You can use the `--web-environment` flag to overwrite existing values rather than adding them.
+
+!!!warning "Don’t check in sensitive values!"
+    Sensitive variables like API keys should not be checked in with your project. You might use an `.env` file and _not_ check that in, but offer a `.env.example` with expected keys that don’t have values. Some use global configuration for sensitive values, as that’s not normally checked in either. (If you provide a `.env.example` it can be checked in, overriding the `.ddev/.gitignore`, with `git add -f .ddev/.env.example`.)
+
+### Altering the In-Container `$PATH`
+
+Sometimes it’s easiest to put the command you need into the existing `$PATH` using a symbolic link rather than changing the in-container `$PATH`. For example, the project `bin` directory is already included the `$PATH`. So if you have a command you want to run that’s not already in the `$PATH`, you can add a symlink.
+
+Examples:
+
+* On Craft CMS, the `craft` script is often in the project root, which is not in the `$PATH`. But if you `mkdir bin && ln -s craft bin/craft` you should be able to run `ddev exec craft`. (Note however that `ddev craft` takes care of this for you.)
+* On projects where the `vendor` directory is not in the project root (Acquia projects, for example, have `composer.json` and `vendor` in the `docroot` directory), you can `mkdir bin && ln -s docroot/vendor/bin/drush bin/drush` to put `drush` in your `$PATH`. (With projects like this, make sure to set `composer_root: docroot` so that `ddev composer` works properly.)
+
+You can also modify the `PATH` environment variable by adding a script to `<project>/.ddev/homeadditions/.bashrc.d/` or (global) `~/.ddev/homeadditions/.bashrc.d/`. For example, if your project vendor directory is not in the expected place (`/var/www/html/vendor/bin`) you can add a `<project>/.ddev/homeadditions/.bashrc.d/path.sh`:
+
+```bash
+export PATH=$PATH:/var/www/html/somewhereelse/vendor/bin
+```
+
 ## Changing PHP Version
 
-The project's `.ddev/config.yaml` file defines the PHP version to use. The [`php_version`](../configuration/config.md#php_version) can be changed to `5.6`, `7.0`, `7.1`, `7.2`,  `7.3`, `7.4`, `8.0`, `8.1`, `8.2`, or `8.3`. The current default is `8.1`.
+The project's `.ddev/config.yaml` file defines the PHP version to use. The [`php_version`](../configuration/config.md#php_version) can be changed to `5.6`, `7.0`, `7.1`, `7.2`,  `7.3`, `7.4`, `8.0`, `8.1`, `8.2`, '8.3', or `8.4`.
 
 ### Older Versions of PHP
 
@@ -31,15 +88,15 @@ If you need to create a service configuration for your project, see [Defining Ad
 
 There are many ways to deploy Node.js in any project, so DDEV tries to let you set up any possibility you can come up with.
 
-* You can choose the Node.js version you want to use in `.ddev/config.yaml` with [`nodejs_version`](../configuration/config.md#nodejs_version).
+* You can choose any Node.js version you want (including minor and older versions) in `.ddev/config.yaml` with [`nodejs_version`](../configuration/config.md#nodejs_version).
 * [`ddev nvm`](../usage/commands.md#nvm) gives you the full capabilities of [Node Version Manager](https://github.com/nvm-sh/nvm).
 * [`ddev npm`](../usage/commands.md#npm) and [`ddev yarn`](../usage/commands.md#yarn) provide shortcuts to the `npm` and `yarn` commands inside the container, and their caches are persistent.
 * You can run Node.js daemons using [`web_extra_daemons`](#running-extra-daemons-in-the-web-container).
 * You can expose Node.js ports via `ddev-router` by using [`web_extra_exposed_ports`](#exposing-extra-ports-via-ddev-router).
-* You can manually run Node.js scripts using [`ddev exec <script>`](../usage/commands.md#exec) or `ddev exec nodejs <script>`.
+* You can manually run Node.js scripts using [`ddev exec <script>`](../usage/commands.md#exec) or `ddev exec node <script>`.
 
 !!!tip "Please share your techniques!"
-    There are several ways to share your favorite Node.js tips and techniques. Best are [ddev-get add-ons](additional-services.md#additional-service-configurations-and-add-ons-for-ddev), [Stack Overflow](https://stackoverflow.com/tags/ddev), and [ddev-contrib](https://github.com/ddev/ddev-contrib).
+    There are several ways to share your favorite Node.js tips and techniques. Best are [ddev-get add-ons](additional-services.md), [Stack Overflow](https://stackoverflow.com/tags/ddev), and [ddev-contrib](https://github.com/ddev/ddev-contrib).
 
 ## Running Extra Daemons in the Web Container
 
@@ -49,7 +106,22 @@ There are several ways to run processes inside the `web` container.
 2. Run them with a `post-start` [hook](../configuration/hooks.md).
 3. Run them automatically using `web_extra_daemons`.
 
-### Running Extra Daemons with `post-start` Hook
+!!!tip "Daemons requiring network access should bind to `0.0.0.0`, not to `localhost` or `127.0.0.1`"
+    Many examples on the internet show starting daemons starting up and binding to `127.0.0.1` or `localhost`. Those examples are assuming that network consumers are on the same network interface, but with a DDEV-based solution the network server is essentially on a different computer from the host computer (workstation). If the host computer needs to have connectivity, then bind to `0.0.0.0` (meaning "all network interfaces") rather than `127.0.0.1` or `localhost` (which means only allow access from the local network). A [ReactPHP example](https://github.com/orgs/ddev/discussions/5973) would be:
+    <!-- markdownlint-disable -->
+    ```php
+    $socket = new React\Socket\SocketServer('0.0.0.0:3000');
+    ```
+    <!-- markdownlint-restore -->
+    instead of:
+    <!-- markdownlint-disable -->
+    ```php
+    $socket = new React\Socket\SocketServer('127.0.0.1:3000');
+    ```
+    <!-- markdownlint-restore -->
+    To expose your daemon to the workstation and browser, see [Exposing Extra Ports via `ddev-router`](#exposing-extra-ports-via-ddev-router).
+
+### Running Extra Daemons with a `post-start` Hook
 
 Daemons can be run with a `post-start` `exec` hook or automatically started using `supervisord`.
 
@@ -79,11 +151,13 @@ web_extra_daemons:
     directory: /var/www/html
 ```
 
+!!!tip "How to view the results of a daemon start attempt?"
+    See [`ddev logs`](../usage/commands.md#logs) or `docker logs ddev-<project>-web`.
+
 * `directory` should be the absolute path inside the container to the directory where the daemon should run.
 * `command` is best as a simple binary with its arguments, but Bash features like `cd` or `&&` work. If the program to be run is not in the `ddev-webserver` `$PATH` then it should have the absolute in-container path to the program to be run, like `/var/www/html/node_modules/.bin/http-server`.
 * `web_extra_daemons` is a shortcut for adding a configuration to `supervisord`, which organizes daemons inside the web container. If the default settings are inadequate for your use, you can write a [complete config file for your daemon](#explicit-supervisord-configuration-for-additional-daemons).
 * Your daemon is expected to run in the foreground, not to daemonize itself, `supervisord` will take care of that.
-* To see the results of the attempt to start your daemon, see [`ddev logs`](../usage/commands.md#logs) or `docker logs ddev-<project>-web`.
 
 ## Exposing Extra Ports via `ddev-router`
 
@@ -129,57 +203,6 @@ services:
 
 If multiple projects declare the same port, only the first project will be able to start successfully. Consider making services like this disabled by default, especially if they aren't needed in day to day use.
 
-## Providing Custom Environment Variables to a Container
-
-You can set custom environment variables in several places:
-
-* The project’s [`web_environment`](../configuration/config.md#web_environment) setting in `.ddev/config.yaml` or `.ddev/config.*.yaml`:
-
-    ```yaml
-    web_environment:
-    - MY_ENV_VAR=someval
-    - MY_OTHER_ENV_VAR=someotherval
-    ```
-
-* The global `web_environment` setting in `.ddev/global_config.yaml`.
-
-* An optional, project-level `.ddev/.env` file, which could look something like this:
-
-    ```
-    MY_ENV_VAR='someval'
-    MY_OTHER_ENV_VAR='someotherval'
-    ```
-
-If you’d rather use the CLI to set the project or global `web_environment` value, you can use the [`ddev config`](../usage/commands.md#config) command:
-
-```sh
-# Set MY_ENV_VAR for the project
-ddev config --web-environment-add="MY_ENV_VAR=someval"
-
-# Set MY_ENV_VAR globally
-ddev config global --web-environment-add="MY_ENV_VAR=someval
-```
-
-You can use the `--web-environment` flag to overwrite existing values rather than adding them.
-
-!!!warning "Don’t check in sensitive values!"
-    Sensitive variables like API keys should not be checked in with your project. Typically you might use an `.env` file and _not_ check that in, but offer `.env.example` with expected keys that don’t have values. Some use global configuration for sensitive values, as that’s not normally checked in either.
-
-### Altering the In-Container `$PATH`
-
-Sometimes it’s easiest to put the command you need into the existing `$PATH` using a symbolic link rather than changing the in-container `$PATH`. For example, the project `bin` directory is already included the `$PATH`. So if you have a command you want to run that’s not already in the `$PATH`, you can add a symlink.
-
-Examples:
-
-* On Craft CMS, the `craft` script is often in the project root, which is not in the `$PATH`. But if you `mkdir bin && ln -s craft bin/craft` you should be able to run `ddev exec craft`. (Note however that `ddev craft` takes care of this for you.)
-* On projects where the `vendor` directory is not in the project root (Acquia projects, for example, have `composer.json` and `vendor` in the `docroot` directory), you can `mkdir bin && ln -s docroot/vendor/bin/drush bin/drush` to put `drush` in your `$PATH`. (With projects like this, make sure to set `composer_root: docroot` so that `ddev composer` works properly.)
-
-You can also modify the `PATH` environment variable by adding a script to `<project>/.ddev/homeadditions/.bashrc.d/` or (global) `~/.ddev/homeadditions/.bashrc.d/`. For example, if your project vendor directory is not in the expected place (`/var/www/html/vendor/bin`) you can add a `<project>/.ddev/homeadditions/.bashrc.d/path.sh`:
-
-```bash
-export PATH=$PATH:/var/www/html/somewhereelse/vendor/bin
-```
-
 ## Custom nginx Configuration
 
 When you run [`ddev restart`](../usage/commands.md#restart) using `nginx-fpm`, DDEV creates a configuration customized to your project type in `.ddev/nginx_full/nginx-site.conf`. You can edit and override the configuration by removing the `#ddev-generated` line and doing whatever you need with it. After each change, run `ddev restart`. (For updates without restart, see [Troubleshooting nginx Configuration](#troubleshooting-nginx-configuration).)
@@ -218,7 +241,10 @@ After adding a snippet, run `ddev restart` to make it take effect.
 
 If you’re using [`webserver_type: apache-fpm`](../configuration/config.md#webserver_type) in your `.ddev/config.yaml`, you can override the default site configuration by editing or replacing the DDEV-provided `.ddev/apache/apache-site.conf` configuration.
 
+When you run [`ddev restart`](../usage/commands.md#restart) using `apache-fpm`, DDEV creates a configuration customized to your project type in `.ddev/apache/apache-site.conf`. You can edit and override the configuration by removing the `#ddev-generated` line and doing whatever you need with it. After each change, run `ddev restart`.
+
 * Edit the `.ddev/apache/apache-site.conf`.
+* Remove the `#ddev-generated` to signal to DDEV that you're taking control of the file.
 * Add your configuration changes.
 * Save your configuration file and run [`ddev restart`](../usage/commands.md#restart). If you encounter issues with your configuration or the project fails to start, use [`ddev logs`](../usage/commands.md#logs) to inspect the logs for possible Apache configuration errors.
 * Use `ddev exec apachectl -t` to do a general Apache syntax check.
@@ -325,7 +351,7 @@ In these case you can create a `.ddev/web-build/<daemonname>.conf` with configur
 command=/var/www/html/path/to/daemon
 directory=/var/www/html/
 autorestart=true
-startretries=10
+startretries=3
 stdout_logfile=/var/tmp/logpipe
 stdout_logfile_maxbytes=0
 redirect_stderr=true

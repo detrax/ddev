@@ -14,8 +14,9 @@ import (
 )
 
 var CleanCmd = &cobra.Command{
-	Use:   "clean [projectname ...]",
-	Short: "Removes items DDEV has created",
+	ValidArgsFunction: ddevapp.GetProjectNamesFunc("all", 0),
+	Use:               "clean [projectname ...]",
+	Short:             "Removes items DDEV has created",
 	Long: `Stops all running projects and then removes downloads and snapshots
 for the selected projects. Then clean will remove "ddev/ddev-*" images.
 
@@ -37,7 +38,12 @@ Additional commands that can help clean up resources:
 			util.Failed("No project provided. See ddev clean --help for usage")
 		}
 
+		// Skip project validation
+		originalRunValidateConfig := ddevapp.RunValidateConfig
+		ddevapp.RunValidateConfig = false
 		projects, err := getRequestedProjects(args, cleanAll)
+		ddevapp.RunValidateConfig = originalRunValidateConfig
+
 		if err != nil {
 			util.Failed("Failed to get project(s) '%v': %v", args, err)
 		}

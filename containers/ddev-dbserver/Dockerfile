@@ -7,10 +7,10 @@ ARG BASE_IMAGE
 ARG DB_VERSION
 
 ENV LANG=C.UTF-8
-ENV MYSQL_DATABASE db
-ENV MYSQL_USER db
-ENV MYSQL_PASSWORD db
-ENV MYSQL_ROOT_PASSWORD root
+ENV MYSQL_DATABASE=db
+ENV MYSQL_USER=db
+ENV MYSQL_PASSWORD=db
+ENV MYSQL_ROOT_PASSWORD=root
 
 SHELL ["/bin/bash", "-c"]
 
@@ -23,6 +23,11 @@ RUN for item in "75DD C3C4 A499 F1A1 8CB5  F3C8 CBF8 D6FD 518E 17E1" "126C 0D24 
     apt-key remove "${item}" || true; \
   done;
 
+# MariaDB 11.x moved MySQL symlinks into separate packages
+RUN set -x; if ( command -v mariadbd && ! command -v mysqld ); then \
+    apt-get -qq update && DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::="--force-confold" mariadb-server-compat mariadb-client-compat; \
+    fi
+
 # Older versions of mariadb have been removed from
 # the mariadb apt repository, so we don't want to
 # look there when doing apt-get update. And we don't use new packages from there.
@@ -30,7 +35,7 @@ RUN for item in "75DD C3C4 A499 F1A1 8CB5  F3C8 CBF8 D6FD 518E 17E1" "126C 0D24 
 # and remove it here
 RUN rm -f /etc/apt/sources.list.d/mariadb.list /etc/apt/sources.list.d/percona.list
 
-RUN apt-get -qq update && DEBIAN_FRONTEND=noninteractive apt-get -qq install -y -o Dpkg::Options::="--force-confold" curl gnupg2 less lsb-release pv tzdata vim wget >/dev/null
+RUN apt-get -qq update && DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::="--force-confold" bzip2 curl gnupg2 less lsb-release pv tzdata vim wget
 
 # If on 14.04 Ubuntu the percona repositories won't allow TLS apparently, so
 # Use http when connecting. This currently only affects MariaDB 5.5
@@ -38,9 +43,11 @@ RUN set -x; if ( ! command -v xtrabackup && ! command -v mariabackup && [ $(arch
     curl --fail -sSL https://repo.percona.com/apt/percona-release_latest.$(lsb_release -sc)_all.deb -o percona-release_latest.$(lsb_release -sc)_all.deb; \
     dpkg -i percona-release_latest.$(lsb_release -sc)_all.deb >/dev/null; \
     rm percona-release*.deb ; \
+    percona_setup=pxb24; \
     xtrabackup_version=percona-xtrabackup-24 ; \
     if [ "$(lsb_release -i -s)" = "Ubuntu" ] && "$(lsb_release -r -s)" <= "16.04" ]; then sed -i s/https:/http:/g /etc/apt/sources.list.d/percona.list; fi; \
-    if [ "$DB_VERSION" = "8.0" ]; then xtrabackup_version=percona-xtrabackup-80; fi ; \
+    if [ "$DB_VERSION" = "8.0" ]; then xtrabackup_version=percona-xtrabackup-80; percona_setup=pxb80; fi ; \
+    percona-release setup ${percona_setup}; \
     apt-get -qq update && apt-get -qq install -y ${xtrabackup_version} >/dev/null ; \
 fi
 RUN apt-get -qq autoclean

@@ -1,16 +1,17 @@
+# WSL2 using Docker Desktop
+# See https://buildkite.com/ddev/wsl2-docker-desktop/settings/repository
+# Runs on master only because DD is pretty flaky, so we can't keep up with
+# restarts on PRs
+
   - command: ".buildkite/test.sh"
-    plugins:
-      - docker-login#v2.1.0:
-          username: druddockerpullaccount
-          password-env: DOCKERHUB_PULL_PASSWORD
     agents:
       - "os=wsl2"
       - "architecture=amd64"
       - "dockertype=dockerforwindows"
-    branches: "master"
     env:
       BUILDKITE_CLEAN_CHECKOUT: true
       BUILDKITE_BUILD_PATH: ~/tmp/buildkite_builds
       BUILDKIT_PROGRESS: plain
       DDEV_TEST_SHARE_CMD: "true"
+      DOCKER_TYPE: "wsl2-docker-desktop"
     parallelism: 1

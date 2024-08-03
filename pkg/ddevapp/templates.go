@@ -7,11 +7,14 @@ const ConfigInstructions = `
 # name: <projectname> # Name of the project, automatically provides
 #   http://projectname.ddev.site and https://projectname.ddev.site
 
-# type: <projecttype>  # drupal6/7/8, backdrop, typo3, wordpress, php
+# type: <projecttype>  # backdrop, craftcms, django4, drupal, drupal6, drupal7, laravel, magento, magento2, php, python, shopware6, silverstripe, typo3, wordpress
+# See https://ddev.readthedocs.io/en/stable/users/quickstart/ for more
+# information on the different project types
+# "drupal" covers recent Drupal 8+
 
 # docroot: <relative_path> # Relative path to the directory containing index.php.
 
-# php_version: "8.1"  # PHP version to use, "5.6", "7.0", "7.1", "7.2", "7.3", "7.4", "8.0", "8.1", "8.2", "8.3"
+# php_version: "8.2"  # PHP version to use, "5.6", "7.0", "7.1", "7.2", "7.3", "7.4", "8.0", "8.1", "8.2", "8.3", "8.4"
 
 # You can explicitly specify the webimage but this
 # is not recommended, as the images are often closely tied to DDEV's' behavior,
@@ -21,8 +24,9 @@ const ConfigInstructions = `
 
 # database:
 #   type: <dbtype> # mysql, mariadb, postgres
-#   version: <version> # database version, like "10.4" or "8.0"
-#   MariaDB versions can be 5.5-10.8 and 10.11, MySQL versions can be 5.5-8.0
+#   version: <version> # database version, like "10.11" or "8.0"
+#   MariaDB versions can be 5.5-10.8, 10.11, and 11.4.
+#   MySQL versions can be 5.5-8.0.
 #   PostgreSQL versions can be 9-16.
 
 # router_http_port: <port>  # Port to be used for http (defaults to global configuration, usually 80)
@@ -62,12 +66,15 @@ const ConfigInstructions = `
 # Alternatively, an explicit Composer version may be specified, for example "2.2.18".
 # To reinstall Composer after the image was built, run "ddev debug refresh".
 
-# nodejs_version: "18"
-# change from the default system Node.js version to another supported version, like 16, 18, 20.
-# Note that you can use 'ddev nvm' or nvm inside the web container to provide nearly any
-# Node.js version, including v6, etc.
-# You only need to configure this if you are not using nvm and you want to use a major
-# version that is not the default.
+# nodejs_version: "20"
+# change from the default system Node.js version to any other version.
+# See https://ddev.readthedocs.io/en/stable/users/configuration/config/#nodejs_version for more information
+# and https://www.npmjs.com/package/n#specifying-nodejs-versions for the full documentation,
+# Note that using of 'ddev nvm' is discouraged because "nodejs_version" is much easier to use,
+# can specify any version, and is more robust than using 'nvm'.
+
+# corepack_enable: false
+# Change to 'true' to 'corepack enable' and gain access to latest versions of yarn/pnpm
 
 # additional_hostnames:
 #  - somename
@@ -126,8 +133,8 @@ const ConfigInstructions = `
 #   - "mutagen": enables Mutagen for this project.
 #   - "nfs":     enables NFS for this project.
 #
-# See https://ddev.readthedocs.io/en/latest/users/install/performance/#nfs
-# See https://ddev.readthedocs.io/en/latest/users/install/performance/#mutagen
+# See https://ddev.readthedocs.io/en/stable/users/install/performance/#nfs
+# See https://ddev.readthedocs.io/en/stable/users/install/performance/#mutagen
 
 # fail_on_hook_fail: False
 # Decide whether 'ddev start' should be interrupted by a failing hook
@@ -180,7 +187,7 @@ const ConfigInstructions = `
 
 # disable_settings_management: false
 # If true, DDEV will not create CMS-specific settings files like
-# Drupal's settings.php/settings.ddev.php or TYPO3's AdditionalConfiguration.php
+# Drupal's settings.php/settings.ddev.php or TYPO3's additional.php
 # In this case the user must provide all such settings.
 
 # You can inject environment variables into the web container with:

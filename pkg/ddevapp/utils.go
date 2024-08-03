@@ -5,10 +5,12 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"text/template"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/Masterminds/sprig/v3"
 	"github.com/ddev/ddev/pkg/dockerutil"
 	"github.com/ddev/ddev/pkg/fileutil"
@@ -16,8 +18,11 @@ import (
 	"github.com/ddev/ddev/pkg/nodeps"
 	"github.com/ddev/ddev/pkg/output"
 	"github.com/ddev/ddev/pkg/util"
-	docker "github.com/fsouza/go-dockerclient"
+	"github.com/ddev/ddev/pkg/versionconstants"
+	dockerContainer "github.com/docker/docker/api/types/container"
+	dockerVersions "github.com/docker/docker/api/types/versions"
 	"github.com/jedib0t/go-pretty/v6/table"
+	"github.com/spf13/cobra"
 )
 
 // GetActiveProjects returns an array of DDEV projects
@@ -93,7 +98,7 @@ func RenderAppRow(t table.Writer, row map[string]interface{}) {
 // Cleanup will remove DDEV containers and volumes even if docker-compose.yml
 // has been deleted.
 func Cleanup(app *DdevApp) error {
-	client := dockerutil.GetDockerClient()
+	ctx, client := dockerutil.GetDockerClient()
 
 	// Find all containers which match the current site name.
 	labels := map[string]string{
@@ -122,13 +127,12 @@ func Cleanup(app *DdevApp) error {
 	// First, try stopping the listed containers if they are running.
 	for i := range containers {
 		containerName := containers[i].Names[0][1:len(containers[i].Names[0])]
-		removeOpts := docker.RemoveContainerOptions{
-			ID:            containers[i].ID,
+		removeOpts := dockerContainer.RemoveOptions{
 			RemoveVolumes: true,
 			Force:         true,
 		}
 		output.UserOut.Printf("Removing container: %s", containerName)
-		if err = client.RemoveContainer(removeOpts); err != nil {
+		if err = client.ContainerRemove(ctx, containers[i].ID, removeOpts); err != nil {
 			return fmt.Errorf("could not remove container %s: %v", containerName, err)
 		}
 	}
@@ -185,8 +189,24 @@ func getTemplateFuncMap() map[string]interface{} {
 
 	// Add helpful utilities on top of it
 	m["joinPath"] = path.Join
+	m["templateCanUse"] = templateCanUse
 
 	return m
+}
+
+// templateCanUse will return true if the given feature is available.
+// This is used in YAML templates to determine whether to use a feature or not.
+func templateCanUse(feature string) bool {
+	// healthcheck.start_interval requires Docker Engine v25 or later
+	// See https://github.com/docker/compose/pull/10939
+	if feature == "healthcheck.start_interval" {
+		dockerAPIVersion, err := dockerutil.GetDockerAPIVersion()
+		if err != nil {
+			return false
+		}
+		return dockerVersions.GreaterThanOrEqualTo(dockerAPIVersion, "1.44")
+	}
+	return false
 }
 
 // gitIgnoreTemplate will write a .gitignore file.
@@ -233,7 +253,11 @@ func CreateGitIgnore(targetDir string, ignores ...string) error {
 
 	generatedIgnores := []string{}
 	for _, p := range ignores {
-		sigFound, err := fileutil.FgrepStringInFile(p, nodeps.DdevFileSignature)
+		pFullPath := filepath.Join(targetDir, p)
+		sigFound, err := fileutil.FgrepStringInFile(pFullPath, nodeps.DdevFileSignature)
+		//if err != nil {
+		//	util.Warning("file not found: %s: %v", p, err)
+		//}
 		if sigFound || err != nil {
 			generatedIgnores = append(generatedIgnores, p)
 		}
@@ -345,7 +369,15 @@ func GetProjects(activeOnly bool) ([]*DdevApp, error) {
 
 		app, err := NewApp(info.AppRoot, true)
 		if err != nil {
-			util.Warning("Unable to create project at project root '%s': %v", info.AppRoot, err)
+			if os.IsNotExist(err) {
+				util.Warning("The project '%s' no longer exists in the filesystem, removing it from registry", info.AppRoot)
+				err = globalconfig.RemoveProjectInfo(name)
+				if err != nil {
+					util.Warning("unable to RemoveProjectInfo(%s): %v", name, err)
+				}
+			} else {
+				util.Warning("Something went wrong with %s: %v", info.AppRoot, err)
+			}
 			continue
 		}
 
@@ -400,17 +432,132 @@ func ExtractProjectNames(apps []*DdevApp) []string {
 	return names
 }
 
-// GetRelativeWorkingDirectory returns the relative working directory relative to project root
-// Note that the relative dir is returned as unix-style forward-slashes
-func (app *DdevApp) GetRelativeWorkingDirectory() string {
-	pwd, _ := os.Getwd()
+// GetProjectNamesFunc returns a function for autocompleting project names
+// for command arguments.
+// If status is "inactive" or "active", only names of inactive or active
+// projects respectively are returned.
+// If status is "all", all project names are returned.
+// If numArgs is 0, completion will be provided for infinite arguments,
+// otherwise it will only be provided for the numArgs number of arguments.
+func GetProjectNamesFunc(status string, numArgs int) func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+	return func(_ *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
+		// Don't provide completions if the user keeps hitting space after
+		// exhausting all of the valid arguments.
+		if numArgs > 0 && len(args)+1 > numArgs {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
 
+		// Get all of the projects we're interested in for this completion function.
+		var apps []*DdevApp
+		var err error
+		if status == "inactive" {
+			apps, err = GetInactiveProjects()
+		} else if status == "active" {
+			apps, err = GetProjects(true)
+		} else if status == "all" {
+			apps, err = GetProjects(false)
+		} else {
+			// This is an error state - but we just return nothing
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		// Return nothing if we have nothing, or return all of the project names.
+		// Note that if there's nothing to return, we don't let cobra pick completions
+		// from the files in the cwd.
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+
+		// Don't show arguments that are already written on the command line
+		var projectNames []string
+		for _, name := range ExtractProjectNames(apps) {
+			if !slices.Contains(args, name) {
+				projectNames = append(projectNames, name)
+			}
+		}
+		return projectNames, cobra.ShellCompDirectiveNoFileComp
+	}
+}
+
+// GetRelativeDirectory returns the directory relative to project root
+// Note that the relative dir is returned as unix-style forward-slashes
+func (app *DdevApp) GetRelativeDirectory(path string) string {
 	// Find the relative dir
-	relativeWorkingDir := strings.TrimPrefix(pwd, app.AppRoot)
+	relativeWorkingDir := strings.TrimPrefix(path, app.AppRoot)
 	// Convert to slash/linux/macos notation, should work everywhere
 	relativeWorkingDir = filepath.ToSlash(relativeWorkingDir)
 	// Remove any leading /
 	relativeWorkingDir = strings.TrimLeft(relativeWorkingDir, "/")
 
 	return relativeWorkingDir
+}
+
+// GetRelativeWorkingDirectory returns the relative working directory relative to project root
+// Note that the relative dir is returned as unix-style forward-slashes
+func (app *DdevApp) GetRelativeWorkingDirectory() string {
+	pwd, _ := os.Getwd()
+	return app.GetRelativeDirectory(pwd)
+}
+
+// HasCustomCert returns true if the project uses a custom certificate
+func (app *DdevApp) HasCustomCert() bool {
+	customCertsPath := app.GetConfigPath("custom_certs")
+	certFileName := fmt.Sprintf("%s.crt", app.Name)
+	if !globalconfig.DdevGlobalConfig.IsTraefikRouter() {
+		certFileName = fmt.Sprintf("%s.crt", app.GetHostname())
+	}
+	return fileutil.FileExists(filepath.Join(customCertsPath, certFileName))
+}
+
+// CanUseHTTPOnly returns true if the project can be accessed via http only
+func (app *DdevApp) CanUseHTTPOnly() bool {
+	switch {
+	// Gitpod and Codespaces have their own router with TLS termination
+	case nodeps.IsGitpod() || nodeps.IsCodespaces():
+		return false
+	// If we have no router, then no https otherwise
+	case IsRouterDisabled(app):
+		return true
+	// If a custom cert, we can do https, so false
+	case app.HasCustomCert():
+		return false
+	// If no mkcert installed, no https
+	case globalconfig.GetCAROOT() == "":
+		return true
+	}
+	// Default case is OK to use https
+	return false
+}
+
+// Turn a slice of *DdevApp into a map keyed by name
+func AppSliceToMap(appList []*DdevApp) map[string]*DdevApp {
+	nameMap := make(map[string]*DdevApp)
+	for _, app := range appList {
+		nameMap[app.Name] = app
+	}
+	return nameMap
+}
+
+// CheckDdevVersionConstraint returns an error if the given constraint does not match the current DDEV version
+func CheckDdevVersionConstraint(constraint string, errorPrefix string, errorSuffix string) error {
+	normalizedConstraint := constraint
+	if !strings.Contains(normalizedConstraint, "-") {
+		// Allow pre-releases to be included in the constraint validation
+		// @see https://github.com/Masterminds/semver#working-with-prerelease-versions
+		normalizedConstraint += "-0"
+	}
+	if errorPrefix == "" {
+		errorPrefix = "error"
+	}
+	c, err := semver.NewConstraint(normalizedConstraint)
+	if err != nil {
+		return fmt.Errorf("%s: the '%s' constraint is not valid. See https://github.com/Masterminds/semver#checking-version-constraints for valid constraints format", errorPrefix, constraint).(invalidConstraint)
+	}
+	// Make sure we do this check with valid released versions
+	v, err := semver.NewVersion(versionconstants.DdevVersion)
+	if err == nil {
+		if !c.Check(v) {
+			return fmt.Errorf("%s: your DDEV version '%s' doesn't meet the constraint '%s'. Please update to a DDEV version that meets this constraint %s", errorPrefix, versionconstants.DdevVersion, constraint, strings.TrimSpace(errorSuffix))
+		}
+	}
+	return nil
 }

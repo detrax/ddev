@@ -2,11 +2,12 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/ddev/ddev/pkg/ddevapp"
 	"github.com/ddev/ddev/pkg/nodeps"
 	"github.com/ddev/ddev/pkg/util"
 	"github.com/spf13/cobra"
-	"strings"
 )
 
 var snapshotAll bool
@@ -20,16 +21,17 @@ var snapshotCleanupNoConfirm bool
 
 // DdevSnapshotCommand provides the snapshot command
 var DdevSnapshotCommand = &cobra.Command{
-	Use:   "snapshot [projectname projectname...]",
-	Short: "Create a database snapshot for one or more projects.",
-	Long:  `Uses mariabackup or xtrabackup command to create a database snapshot in the .ddev/db_snapshots folder. These are compatible with server backups using the same tools and can be restored with "ddev snapshot restore".`,
+	ValidArgsFunction: ddevapp.GetProjectNamesFunc("all", 0),
+	Use:               "snapshot [projectname projectname...]",
+	Short:             "Create a database snapshot for one or more projects.",
+	Long:              `Uses mariabackup or xtrabackup command to create a database snapshot in the .ddev/db_snapshots folder. These are compatible with server backups using the same tools and can be restored with "ddev snapshot restore".`,
 	Example: `ddev snapshot
 ddev snapshot --name some_descriptive_name
 ddev snapshot --cleanup
 ddev snapshot --cleanup -y
 ddev snapshot --list
 ddev snapshot --all`,
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, args []string) {
 		apps, err := getRequestedProjects(args, snapshotAll)
 		if err != nil {
 			util.Failed("Unable to get project(s) %v: %v", args, err)
@@ -90,6 +92,7 @@ func createAppSnapshot(app *ddevapp.DdevApp) {
 		util.Warning(errorMsg, app.GetName(), err)
 	} else {
 		util.Success("Created database snapshot %s", snapshotNameOutput)
+		util.Success("Restore this snapshot with 'ddev snapshot restore %s'", snapshotNameOutput)
 	}
 	// Return the app to its previous state, stopped or paused.
 	if appStatus == ddevapp.SiteStopped {

@@ -19,7 +19,7 @@ var DebugDockercheckCmd = &cobra.Command{
 	Use:     "dockercheck",
 	Short:   "Diagnose DDEV Docker/Colima setup",
 	Example: "ddev debug dockercheck",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, args []string) {
 		if len(args) != 0 {
 			util.Failed("This command takes no additional arguments")
 		}
@@ -67,20 +67,20 @@ var DebugDockercheckCmd = &cobra.Command{
 			}
 		}
 
-		client := dockerutil.GetDockerClient()
+		_, client := dockerutil.GetDockerClient()
 		if client == nil {
 			util.Failed("Unable to get Docker client")
 		}
 
 		uid, _, _ := util.GetContainerUIDGid()
-		_, out, err := dockerutil.RunSimpleContainer(docker.GetWebImage(), "dockercheck-runcontainer--"+util.RandString(6), []string{"ls", "/mnt/ddev-global-cache"}, []string{}, []string{}, []string{"ddev-global-cache" + ":/mnt/ddev-global-cache"}, uid, true, false, map[string]string{"com.ddev.site-name": ""}, nil)
+		_, out, err := dockerutil.RunSimpleContainer(docker.GetWebImage(), "dockercheck-runcontainer--"+util.RandString(6), []string{"ls", "/mnt/ddev-global-cache"}, []string{}, []string{}, []string{"ddev-global-cache" + ":/mnt/ddev-global-cache"}, uid, true, false, map[string]string{"com.ddev.site-name": ""}, nil, nil)
 		if err != nil {
 			util.Warning("Unable to run simple container: %v; output=%s", err, out)
 		} else {
 			util.Success("Able to run simple container that mounts a volume.")
 		}
 
-		_, _, err = dockerutil.RunSimpleContainer(docker.GetWebImage(), "dockercheck-curl--"+util.RandString(6), []string{"curl", "-sfLI", "https://google.com"}, []string{}, []string{}, []string{"ddev-global-cache" + ":/mnt/ddev-global-cache/bashhistory"}, uid, true, false, map[string]string{"com.ddev.site-name": ""}, nil)
+		_, _, err = dockerutil.RunSimpleContainer(docker.GetWebImage(), "dockercheck-curl--"+util.RandString(6), []string{"curl", "-sfLI", "https://google.com"}, []string{}, []string{}, []string{"ddev-global-cache" + ":/mnt/ddev-global-cache/bashhistory"}, uid, true, false, map[string]string{"com.ddev.site-name": ""}, nil, nil)
 		if err != nil {
 			util.Warning("Unable to run use internet inside container, many things will fail: %v", err)
 		} else {

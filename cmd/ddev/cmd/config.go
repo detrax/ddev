@@ -171,6 +171,10 @@ func handleConfigRun(cmd *cobra.Command, args []string) {
 		if err != nil {
 			util.Failed("There was a problem configuring your project: %v", err)
 		}
+		err = app.WriteConfig()
+		if err != nil {
+			util.Failed("Failed to write config: %v", err)
+		}
 	} else {
 		err = handleMainConfigArgs(cmd, args, app)
 		if err != nil {
@@ -182,11 +186,6 @@ func handleConfigRun(cmd *cobra.Command, args []string) {
 				util.Failed("failed to handle per-provider extra flags: %v", err)
 			}
 		}
-	}
-
-	err = app.WriteConfig()
-	if err != nil {
-		util.Failed("Failed to write config: %v", err)
 	}
 
 	_, err = app.CreateSettingsFile()
@@ -215,9 +214,11 @@ func init() {
 	ConfigCommand.Flags().BoolVar(&composerRootRelPathDefaultArg, "composer-root-default", false, "Unsets a web service Composer root directory override")
 	ConfigCommand.Flags().StringVar(&projectTypeArg, "project-type", "", projectTypeUsage)
 	ConfigCommand.Flags().StringVar(&phpVersionArg, "php-version", "", "The version of PHP that will be enabled in the web container")
-	ConfigCommand.Flags().StringVar(&httpPortArg, "http-port", "", "The router HTTP port for this project")
+	ConfigCommand.Flags().StringVar(&httpPortArg, "http-port", "", "The router HTTP port for this project; deprecated alias for `--router-http-port`")
+	_ = ConfigCommand.Flags().MarkDeprecated("http-port", "--http-port is a deprecated alias for `--router-http-port`")
 	ConfigCommand.Flags().StringVar(&httpPortArg, "router-http-port", "", "The router HTTP port for this project")
-	ConfigCommand.Flags().StringVar(&httpsPortArg, "https-port", "", "The router HTTPS port for this project")
+	ConfigCommand.Flags().StringVar(&httpsPortArg, "https-port", "", "The router HTTPS port for this project; deprecated alias for `--router-https-port`")
+	_ = ConfigCommand.Flags().MarkDeprecated("https-port", "--https-port is a deprecated alias for `--router-https-port`")
 	ConfigCommand.Flags().StringVar(&httpsPortArg, "router-https-port", "", "The router HTTPS port for this project")
 	ConfigCommand.Flags().BoolVar(&xdebugEnabledArg, "xdebug-enabled", false, "Whether or not XDebug is enabled in the web container")
 	ConfigCommand.Flags().BoolVar(&noProjectMountArg, "no-project-mount", false, "Whether or not to skip mounting project code into the web container")
@@ -227,6 +228,7 @@ func init() {
 	ConfigCommand.Flags().StringVar(&webEnvironmentLocal, "web-environment", "", `Set the environment variables in the web container: --web-environment="TYPO3_CONTEXT=Development,SOMEENV=someval"`)
 	ConfigCommand.Flags().StringVar(&webEnvironmentLocal, "web-environment-add", "", `Append environment variables to the web container: --web-environment="TYPO3_CONTEXT=Development,SOMEENV=someval"`)
 	ConfigCommand.Flags().BoolVar(&createDocroot, "create-docroot", false, "Prompts DDEV to create the docroot if it doesn't exist")
+	_ = ConfigCommand.Flags().MarkDeprecated("create-docroot", "--create-docroot flag is no longer required")
 	ConfigCommand.Flags().BoolVar(&showConfigLocation, "show-config-location", false, "Output the location of the config.yaml file if it exists, or error that it doesn't exist.")
 	ConfigCommand.Flags().StringSlice("upload-dirs", []string{}, "Sets the project's upload directories, the destination directories of the import-files command.")
 	ConfigCommand.Flags().String("upload-dir", "", "Sets the project's upload directories, the destination directories of the import-files command.")
@@ -306,6 +308,8 @@ func init() {
 	ConfigCommand.Flags().Int("default-container-timeout", 120, `default time in seconds that DDEV waits for all containers to become ready on start`)
 	ConfigCommand.Flags().Bool("disable-upload-dirs-warning", true, `Disable warnings about upload-dirs not being set when using performance-mode=mutagen.`)
 	ConfigCommand.Flags().StringVar(&ddevVersionConstraint, "ddev-version-constraint", "", `Specify a ddev version constraint to validate ddev against.`)
+	ConfigCommand.Flags().Bool("corepack-enable", true, `Do 'corepack enable' to enable latest yarn/pnpm'`)
+	ConfigCommand.Flags().Bool("update", false, `Update project settings based on detection and project-type overrides`)
 
 	RootCmd.AddCommand(ConfigCommand)
 
@@ -314,7 +318,7 @@ func init() {
 		Use:    "pantheon",
 		Short:  "ddev config pantheon is no longer needed, see docs",
 		Hidden: true,
-		Run: func(cmd *cobra.Command, args []string) {
+		Run: func(_ *cobra.Command, _ []string) {
 			output.UserOut.Print("`ddev config pantheon` is no longer needed, see docs")
 		},
 	})
@@ -377,18 +381,18 @@ func handleMainConfigArgs(cmd *cobra.Command, _ []string, app *ddevapp.DdevApp) 
 	} else { // No siteNameArg passed, c.Name not set: use c.Name from the directory
 		pwd, err := os.Getwd()
 		util.CheckErr(err)
-		app.Name = filepath.Base(pwd)
+		app.Name = ddevapp.NormalizeProjectName(filepath.Base(pwd))
+	}
+
+	err = app.CheckExistingAppInApproot()
+	if err != nil {
+		util.Failed(err.Error())
 	}
 
 	// Ensure that the docroot exists
 	if docrootRelPathArg != "" {
 		app.Docroot = docrootRelPathArg
 		if _, err = os.Stat(docrootRelPathArg); os.IsNotExist(err) {
-			// If the user has indicated that the docroot should be created, create it.
-			if !createDocroot {
-				util.Failed("The provided docroot %s does not exist. Allow DDEV to create it with the --create-docroot flag.", docrootRelPathArg)
-			}
-
 			var docrootAbsPath string
 			docrootAbsPath, err = filepath.Abs(app.Docroot)
 			if err != nil {
@@ -399,7 +403,7 @@ func handleMainConfigArgs(cmd *cobra.Command, _ []string, app *ddevapp.DdevApp) 
 				util.Failed("Could not create docroot at %s: %v", docrootAbsPath, err)
 			}
 
-			util.Success("Created docroot at %s", docrootAbsPath)
+			util.Success("Created docroot directory at %s", docrootAbsPath)
 		}
 	} else if !cmd.Flags().Changed("docroot") {
 		app.Docroot = ddevapp.DiscoverDefaultDocroot(app)
@@ -415,7 +419,7 @@ func handleMainConfigArgs(cmd *cobra.Command, _ []string, app *ddevapp.DdevApp) 
 	}
 
 	if projectTypeArg != "" && !ddevapp.IsValidAppType(projectTypeArg) {
-		validAppTypes := strings.Join(ddevapp.GetValidAppTypes(), ", ")
+		validAppTypes := strings.Join(ddevapp.GetValidAppTypesWithoutAliases(), ", ")
 		util.Failed("Apptype must be one of %s", validAppTypes)
 	}
 
@@ -425,13 +429,19 @@ func handleMainConfigArgs(cmd *cobra.Command, _ []string, app *ddevapp.DdevApp) 
 		util.Failed("Failed to get absolute path to Docroot %s: %v", app.Docroot, pathErr)
 	}
 
+	doUpdate, _ := cmd.Flags().GetBool("update")
 	switch {
-	case projectTypeArg != "" && detectedApptype == nodeps.AppTypePHP: // apptype was passed, but we found no app at all
+	case doUpdate:
+		if projectTypeArg == "" {
+			projectTypeArg = detectedApptype
+		}
+
 		app.Type = projectTypeArg
-		util.Warning("You have specified a project type of '%s' but no project of that type is found in %s", projectTypeArg, fullPath)
-	case projectTypeArg != "" && detectedApptype != projectTypeArg: // apptype was passed, app was found, but not the same type
-		app.Type = projectTypeArg
-		util.Warning("You have specified a project type of '%s' but a project of type '%s' was discovered in %s", projectTypeArg, detectedApptype, fullPath)
+		util.Success("Auto-updating project configuration because update is requested.\nConfiguring a '%s' project with docroot '%s' at '%s'", app.Type, app.Docroot, fullPath)
+		err = app.ConfigFileOverrideAction(true)
+		if err != nil {
+			util.Warning("ConfigOverrideAction failed: %v")
+		}
 	case app.Type != nodeps.AppTypeNone && projectTypeArg == "" && detectedApptype != app.Type: // apptype was not passed, but we found an app of a different type
 		util.Warning("A project of type '%s' was found in %s, but the project is configured with type '%s'", detectedApptype, fullPath, app.Type)
 	default:
@@ -440,17 +450,12 @@ func handleMainConfigArgs(cmd *cobra.Command, _ []string, app *ddevapp.DdevApp) 
 		}
 
 		app.Type = projectTypeArg
-
-		if detectedApptype == nodeps.AppTypePHP {
-			util.Success("Configuring unrecognized codebase as project of type '%s' at %s", app.Type, fullPath)
-		} else {
-			util.Success("Configuring a '%s' codebase with docroot '%s' at %s", detectedApptype, app.Docroot, fullPath)
-		}
+		util.Success("Configuring a '%s' project named '%s' with docroot '%s' at '%s'.\nFor full details use 'ddev describe'.", app.Type, app.Name, app.Docroot, fullPath)
 	}
 
 	// App overrides are done after app type is detected, but
 	// before user-defined flags are set.
-	err = app.ConfigFileOverrideAction()
+	err = app.ConfigFileOverrideAction(false)
 	if err != nil {
 		util.Failed("Failed to run ConfigFileOverrideAction: %v", err)
 	}
@@ -529,21 +534,18 @@ func handleMainConfigArgs(cmd *cobra.Command, _ []string, app *ddevapp.DdevApp) 
 		app.MailpitHTTPSPort = mailpitHTTPSPortArg
 	}
 
-	if additionalHostnamesArg != "" {
-		app.AdditionalHostnames = strings.Split(additionalHostnamesArg, ",")
-	}
+	// Check if the 'additional-hostnames' flag has been set and not default
+	app.AdditionalHostnames = processFlag(cmd, "additional-hostnames", app.AdditionalHostnames)
 
-	if additionalFQDNsArg != "" {
-		app.AdditionalFQDNs = strings.Split(additionalFQDNsArg, ",")
-	}
+	// Check if the 'additional-fqdns' flag has been set and not default
+	app.AdditionalFQDNs = processFlag(cmd, "additional-fqdns", app.AdditionalFQDNs)
 
-	if omitContainersArg != "" {
-		app.OmitContainers = strings.Split(omitContainersArg, ",")
-	}
+	// Check if the 'omit-containers' flag has been set and not default
+	app.OmitContainers = processFlag(cmd, "omit-containers", app.OmitContainers)
 
 	if cmd.Flag("web-environment").Changed {
 		env := strings.TrimSpace(webEnvironmentLocal)
-		if env == "" {
+		if env == "" || env == `""` || env == `''` {
 			app.WebEnvironment = []string{}
 		} else {
 			app.WebEnvironment = strings.Split(env, ",")
@@ -570,18 +572,20 @@ func handleMainConfigArgs(cmd *cobra.Command, _ []string, app *ddevapp.DdevApp) 
 	}
 
 	if cmd.Flag("webimage-extra-packages").Changed {
-		if cmd.Flag("webimage-extra-packages").Value.String() == "" {
+		val := cmd.Flag("webimage-extra-packages").Value.String()
+		if val == "" || val == `""` || val == `''` {
 			app.WebImageExtraPackages = nil
 		} else {
-			app.WebImageExtraPackages = strings.Split(cmd.Flag("webimage-extra-packages").Value.String(), ",")
+			app.WebImageExtraPackages = strings.Split(val, ",")
 		}
 	}
 
 	if cmd.Flag("dbimage-extra-packages").Changed {
-		if cmd.Flag("dbimage-extra-packages").Value.String() == "" {
+		val := cmd.Flag("dbimage-extra-packages").Value.String()
+		if val == "" || val == `""` || val == `''` {
 			app.DBImageExtraPackages = nil
 		} else {
-			app.DBImageExtraPackages = strings.Split(cmd.Flag("dbimage-extra-packages").Value.String(), ",")
+			app.DBImageExtraPackages = strings.Split(val, ",")
 		}
 	}
 
@@ -641,7 +645,7 @@ func handleMainConfigArgs(cmd *cobra.Command, _ []string, app *ddevapp.DdevApp) 
 		}
 		parts := strings.Split(raw, ":")
 		if len(parts) != 2 {
-			util.Failed("Incorrect database value: %s - use something like 'mariadb:10.3 or mysql:8.0. Options are %v", raw, nodeps.GetValidDatabaseVersions())
+			util.Failed("Incorrect database value: %s - use something like 'mariadb:10.11' or 'mysql:8.0'. Options are %v", raw, nodeps.GetValidDatabaseVersions())
 		}
 		app.Database.Type = parts[0]
 		app.Database.Version = parts[1]
@@ -658,6 +662,10 @@ func handleMainConfigArgs(cmd *cobra.Command, _ []string, app *ddevapp.DdevApp) 
 
 	if cmd.Flag("disable-upload-dirs-warning").Changed {
 		app.DisableUploadDirsWarning, _ = cmd.Flags().GetBool("disable-upload-dirs-warning")
+	}
+
+	if cmd.Flag("corepack-enable").Changed {
+		app.CorepackEnable, _ = cmd.Flags().GetBool("corepack-enable")
 	}
 
 	if webserverTypeArg != "" {
@@ -715,7 +723,7 @@ func handleMainConfigArgs(cmd *cobra.Command, _ []string, app *ddevapp.DdevApp) 
 	// If the database already exists in volume and is not of this type, then throw an error
 	if !nodeps.ArrayContainsString(app.GetOmittedContainers(), "db") {
 		if dbType, err := app.GetExistingDBType(); err != nil || (dbType != "" && dbType != app.Database.Type+":"+app.Database.Version) {
-			return fmt.Errorf("unable to configure project %s with database type %s because that database type does not match the current actual database. Please change your database type back to %s and start again, export, delete, and then change configuration and start. To get back to existing type use 'ddev config --database=%s', and you can try a migration with 'ddev debug migrate-database %s' see docs at %s", app.Name, dbType, dbType, dbType, app.Database.Type+":"+app.Database.Version, "https://ddev.readthedocs.io/en/latest/users/extend/database-types/")
+			return fmt.Errorf("unable to configure project %s with database type %s because that database type does not match the current actual database. Please change your database type back to %s and start again, export, delete, and then change configuration and start. To get back to existing type use 'ddev config --database=%s', and you can try a migration with 'ddev debug migrate-database %s' see docs at %s", app.Name, app.Database.Type+":"+app.Database.Version, dbType, dbType, app.Database.Type+":"+app.Database.Version, "https://ddev.readthedocs.io/en/stable/users/extend/database-types/")
 		}
 	}
 
@@ -724,4 +732,25 @@ func handleMainConfigArgs(cmd *cobra.Command, _ []string, app *ddevapp.DdevApp) 
 	}
 
 	return nil
+}
+
+// processFlag checks if a flag has changed and processes its value accordingly.
+func processFlag(cmd *cobra.Command, flagName string, currentValue []string) []string {
+	// If the flag hasn't changed, return the current value.
+	if !cmd.Flag(flagName).Changed {
+		return currentValue
+	}
+
+	arg := cmd.Flag(flagName).Value.String()
+
+	// Remove all spaces from the flag value.
+	arg = strings.Replace(arg, " ", "", -1)
+
+	// If the flag value is an empty string, return an empty slice.
+	if arg == "" || arg == `""` || arg == `''` {
+		return []string{}
+	}
+
+	// If the flag value is not an empty string, split it by commas and return the resulting slice.
+	return strings.Split(arg, ",")
 }

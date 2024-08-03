@@ -5,19 +5,19 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"github.com/ddev/ddev/pkg/nodeps"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"text/template"
 
-	"runtime"
-
+	"github.com/ddev/ddev/pkg/nodeps"
 	"github.com/ddev/ddev/pkg/output"
 	"github.com/ddev/ddev/pkg/util"
+	"github.com/sirupsen/logrus"
 )
 
 // CopyFile copies the contents of the file named src to the file named
@@ -55,7 +55,7 @@ func CopyFile(src string, dst string) error {
 			return err
 		}
 
-		err = os.Chmod(dst, si.Mode())
+		err = util.Chmod(dst, si.Mode())
 		if err != nil {
 			return fmt.Errorf("failed to chmod file %v to mode %v, err=%v", dst, si.Mode(), err)
 		}
@@ -161,7 +161,7 @@ func PurgeDirectory(path string) error {
 	}
 
 	for _, file := range files {
-		err = os.Chmod(filepath.Join(path, file), 0777)
+		err = util.Chmod(filepath.Join(path, file), 0777)
 		if err != nil {
 			return err
 		}
@@ -187,16 +187,16 @@ func FgrepStringInFile(fullPath string, needle string) (bool, error) {
 
 // GrepStringInFile is a small hammer for looking for a regex in a file.
 // It should only be used against very modest sized files, as the entire file is read
-// into a string.
-func GrepStringInFile(fullPath string, needle string) (bool, error) {
+// into a string. Returns found, matches, error
+func GrepStringInFile(fullPath string, needle string) (bool, []string, error) {
 	fullFileBytes, err := os.ReadFile(fullPath)
 	if err != nil {
-		return false, fmt.Errorf("failed to open file %s, err:%v ", fullPath, err)
+		return false, nil, fmt.Errorf("failed to open file %s, err:%v ", fullPath, err)
 	}
 	fullFileString := string(fullFileBytes)
 	re := regexp.MustCompile(needle)
 	matches := re.FindStringSubmatch(fullFileString)
-	return len(matches) > 0, nil
+	return len(matches) > 0, matches, nil
 }
 
 // ListFilesInDir returns an array of files or directories found in a directory
@@ -368,7 +368,7 @@ func ReplaceSimulatedLinks(path string) {
 	}
 
 	if !CanCreateSymlinks() {
-		util.Warning("This host computer is unable to create real symlinks, please see the docs to enable developer mode:\n%s\nNote that the simulated symlinks created inside the container will work fine for most projects.", "https://ddev.readthedocs.io/en/stable/users/basics/developer-tools/#windows-os-and-ddev-composer")
+		util.Warning("This host computer is unable to create real symlinks, please see the docs to enable developer mode:\n%s\nNote that the simulated symlinks created inside the container will work fine for most projects.", "https://ddev.readthedocs.io/en/stable/users/usage/developer-tools/#windows-os-and-ddev-composer")
 		return
 	}
 
@@ -431,6 +431,16 @@ func TemplateStringToFile(content string, vars map[string]interface{}, targetFil
 		return nil
 	}
 	return nil
+}
+
+// GlobFilenames looks in dirPath for files matching globPattern
+// like "static_config.*.yaml" for example
+func GlobFilenames(dirPath string, globPattern string) ([]string, error) {
+	matchingFiles, err := filepath.Glob(filepath.Join(dirPath, globPattern))
+	if err != nil {
+		return nil, err
+	}
+	return matchingFiles, nil
 }
 
 // CheckSignatureOrNoFile checks to make sure that a file or directory either doesn't exist
@@ -539,4 +549,17 @@ func ExpandFilesAndDirectories(dir string, paths []string) ([]string, error) {
 		}
 	}
 	return expanded, nil
+}
+
+// ShortHomeJoin returns the same result as filepath.Join() path with $HOME/ replaced by ~/
+func ShortHomeJoin(elem ...string) string {
+	userHome, err := os.UserHomeDir()
+	if err != nil {
+		logrus.Fatalf("Could not get home directory for current user. Is it set? err=%v", err)
+	}
+	fullPath := filepath.Join(elem...)
+	if strings.HasPrefix(fullPath, userHome) {
+		return strings.Replace(fullPath, userHome, "~", 1)
+	}
+	return fullPath
 }

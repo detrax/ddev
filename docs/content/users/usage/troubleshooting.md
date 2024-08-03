@@ -4,9 +4,14 @@ Things might go wrong! In addition to this page, consider checking [Stack Overfl
 
 ## General Troubleshooting Strategies
 
+* Please use the [current stable version of DDEV](https://ddev.readthedocs.io/en/stable/users/install/ddev-upgrade/) and of your Docker provider before going too far or asking for support.
 * Start by running [`ddev poweroff`](commands.md#poweroff) to make sure all containers can start fresh.
 * Temporarily disable firewalls, VPNs, tunnels, network proxies, and virus checkers while you’re troubleshooting.
 * Temporarily disable any proxies you’ve established in Docker’s settings.
+* Check to see if you're out of disk space. On macOS, make sure that your Docker provider has adequate disk space allocated. (DDEV will normally warn you about problems in this situation.)
+* On macOS, if you have a particular heavyweight project or are encountering `kill` statements in `ddev logs`, increase your memory allocation in your Docker provider. (Most projects are fine with 5-6GB allocated.)
+* On macOS your Docker provider limits the amount of disk space available to Docker. Make sure that you increase it if you're seeing disk space problems.
+* Please make sure that your project is in a subdirectory of your home directory and has normal ownership and privileges. For example, `ls -ld .` in your project directory should show you as owner of the directory and with write privileges.
 * Use [`ddev debug dockercheck`](commands.md#debug-dockercheck) and [`ddev debug test`](commands.md#debug-test) to help sort out Docker problems.
 * Make sure you do not have disk space problems on your computer. This can be especially tricky on WSL2, where you need to check both the main Windows disk space and WSL2 disk space as well.
 * On macOS, check to make sure Docker Desktop or Colima are not out of disk space. In *Settings* (or *Preferences*) → *Resources* → *Disk image size* there should be ample space left; try not to let usage exceed 80% because the reported number can be unreliable. If it says zero used, something is wrong.
@@ -194,7 +199,7 @@ If you get a 404 with “No input file specified” (nginx) or a 403 with “For
 
 If `ddev start` fails, it’s most often because the `web` or `db` container fails to start. In this case, the error message from `ddev start` says something like “Failed to start <project>: db container failed: log=, err=container exited, please use 'ddev logs -s db' to find out why it failed”. You can`ddev logs -s db` to find out what happened.
 
-If you see any variant of “no space left on device” in the logs when using Docker Desktop, it means you have to increase or clean up Docker’s file space. Increase the “Disk image size” setting under “Resources” in Docker’s Preferences:
+If you see any variant of “no space left on device” in the logs when using Docker Desktop, it means you have to increase or clean up Docker’s file space. Increase the “Disk image size” setting under “Resources” in Docker’s Preferences:
 
 ![Docker disk space](../../images/docker-disk-image-size.png)
 
@@ -245,6 +250,10 @@ docker rmi -f $(docker images -q)
 
 You should then be able to start your DDEV machine.
 
+## `ddev --version` shows an old version
+
+If you have installed or upgraded DDEV to the latest version, but when you check the actual version with `ddev --version`, it shows an older version, please refer to [Why do I have an old DDEV?](./faq.md#why-do-i-have-an-old-ddev)
+
 ## Trouble Building Dockerfiles
 
 The additional `.ddev/web-build/Dockerfile` capability in DDEV is wonderful, but it can be hard to figure out what to put in there.
@@ -273,14 +282,25 @@ or
 ~/.ddev/bin/docker-compose -f .ddev/.ddev-docker-compose-full.yaml --progress=plain build --no-cache
 ```
 
+### Docker build fails `apt-get update`, perhaps "SSL certificate problem: self-signed certificate"
+
+The Docker build environment (where all projects have a little bit happening) is very sensitive to problems with `apt-get update` or with TLS certificate authentication. If you ware seeing problems with `apt-get update` failing, some of these strategies may help:
+
+* **WSL2**: On WSL2 it's a known issue that the WSL2 environment time can get out of sync with the real time. This is an [ongoing problem](https://github.com/microsoft/WSL/issues/10006) with WSL2, and can be fixed with various workarounds. One good workaround is to install `ntpdate` and `sudo ntpdate pool.ntp.org` to sync the time. The time in WSL2 can get out of sync due to laptop sleeping or other causes. A reboot also fixes it.
+* **VPN**: If you are on a packet-inspection VPN, it often causes problems with validation of certificates on internet sites. In that situation you'll need to get the CA updates required and install them with a custom Dockerfile, as described on [Stack Overflow](https://stackoverflow.com/questions/71595327/corporate-network-ddev-composer-create-results-in-ssl-certificate-error/71595428#71595428).
+* **Other Docker Build**: The Dockerfile build environment is different from the host-side build and different from what you get with `ddev ssh`. If you're having trouble with it it may be caused by name resolution or IP connectivity problems, most often caused by a firewall or VPN. Turn off your firewall temporarily and VPN. A good debugging technique would be to do a simple `.ddev/web-build/Dockerfile` that does `RUN curl -I https://www.google.com` and then use `ddev debug refresh` to see the result. If it gets a 200 result, then your name resolution and internet connectivity are working in the Docker build environment.
+
 ## DDEV Starts but Browser Can’t Access URL
 
-You may see one of two messages in your browser:
+You may see one of these messages in your browser:
 
+* `403` Forbidden
 * *[url] server IP address could not be found*
 * *We can’t connect to the server at [url]*
 
-Most people use `*.ddev.site` URLs, which work great most of the time but require internet access.
+If you get the `403 Forbidden` it's almost always because your [docroot is set wrong](faq.md#why-do-i-get-a-403-or-404-on-my-project-after-ddev-launch). You should have something like `docroot: web` or `docroot: ""` or `docroot: docroot` with the relative path to the directory where your `index.php` lives in the project.
+
+**Name resolution**: Most people use `*.ddev.site` URLs, which work great most of the time but require internet access.
 
 `*.ddev.site` is a wildcard DNS entry that always returns the IP address 127.0.0.1 (localhost). If you’re not connected to the internet, however, or if various other name resolution issues fail, this name resolution won’t work.
 
@@ -291,7 +311,7 @@ While DDEV can create a web server and a Docker network infrastructure for a pro
 * If DDEV detects that it can’t look up one of the hostnames assigned to your project for that or other reasons, it will try to add that to the hosts file on your computer, which requires administrative privileges (sudo or Windows UAC).
     * This technique may not work on Windows WSL2, see below.
 
-### DNS Rebinding Prohibited
+### DNS Rebinding Prohibited (Mostly on Fritzbox Routers)
 
 You may see one of several messages:
 
@@ -301,18 +321,21 @@ You may see one of several messages:
 
 Some DNS servers prevent the use of DNS records that resolve to `localhost` (127.0.0.1) because in uncontrolled environments this may be used as a form of attack called [DNS Rebinding](https://en.wikipedia.org/wiki/DNS_rebinding). Since `*.ddev.site` resolves to 127.0.0.1, they may refuse to resolve, and your browser may be unable to look up a hostname, and give you messages like “<url> server IP address could not be found” or “We can’t connect to the server at <url>”.
 
-You verify this is your problem by running `ping dkkd.ddev.site`. If you get “No address associated with hostname” or something of that type, your computer is unable to look up `*.ddev.site`.
+You verify this is your problem by running `ping -c 1 dkkd.ddev.site`. If you get “No address associated with hostname” or something of that type, your computer is unable to look up `*.ddev.site`.
 
 In this case, you can take any one of the following approaches:
 
 1. Reconfigure your router to allow DNS Rebinding. Many Fritzbox routers have added default DNS Rebinding disallowal, and they can be reconfigured to allow it. See [issue](https://github.com/ddev/ddev/issues/2409#issuecomment-686718237). If you have the local dnsmasq DNS server it may also be configured to disallow DNS rebinding, but it’s a simple change to a configuration directive to allow it.
-2. Most computers can use most relaxed DNS resolution if they are not on corporate intranets that have non-internet DNS. So for example, the computer can be set to use 8.8.8.8 (Google) or 1.1.1.1 (Cloudflare) for DNS name resolution.
+2. Most computers can use most relaxed DNS resolution if they are not on corporate intranets that have non-internet DNS. So for example, the computer can be set to use 8.8.8.8 (Google) or 1.1.1.1 (Cloudflare) for DNS name resolution, see [this article](https://www.hellotech.com/guide/for/how-to-change-dns-server-windows-mac).
 3. If you have control of the router, you can usually change its DHCP settings to choose a public, relaxed DNS server as in #2.
 4. You can live with DDEV trying to edit the `/etc/hosts` file, which it only has to do when a new name is added to a project.
 
+An extensive discussion of this class of problem is on [ddev.com](https://ddev.com/blog/ddev-name-resolution-wildcards).
+
 ## Windows WSL2 Network Issues
 
-If you’re using a browser on Windows, accessing a project in WSL2, you can end up with confusing results when your project is listening on a port inside WSL2 while a Windows process is listening on that same port. The way to sort this out is to stop your project inside WSL2, verify that nothing is listening on the port there, and then study the port on the Windows side by visiting it with a browser or using other tools as described above.
+* Some recent WSL2 versions have had very slow or completely failed network access inside the container or during the Docker build process. A `wsl --shutdown` or a reboot seems to clear these up.
+* If you’re using a browser on Windows, accessing a project in WSL2, you can end up with confusing results when your project is listening on a port inside WSL2 while a Windows process is listening on that same port. The way to sort this out is to stop your project inside WSL2, verify that nothing is listening on the port there, and then study the port on the Windows side by visiting it with a browser or using other tools as described above.
 
 ## Limitations on Symbolic Links (symlinks)
 

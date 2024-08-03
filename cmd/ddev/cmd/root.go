@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -16,13 +15,12 @@ import (
 	"github.com/ddev/ddev/pkg/versionconstants"
 	"github.com/spf13/cobra"
 	"golang.org/x/mod/semver"
-	"gopkg.in/segmentio/analytics-go.v3"
 )
 
 var (
-	updateInterval     = time.Hour * 24 * 7 // One week interval between updates
+	updateInterval     = time.Hour * 4 // Four-hour interval between updates
 	serviceType        string
-	updateDocURL       = "https://ddev.readthedocs.io/en/stable/users/install/"
+	updateDocURL       = "https://ddev.readthedocs.io/en/stable/users/install/ddev-upgrade/"
 	instrumentationApp *ddevapp.DdevApp
 )
 
@@ -32,7 +30,7 @@ var RootCmd = &cobra.Command{
 	Short: "DDEV local development environment",
 	Long: `Create and maintain a local web development environment.
 Docs: https://ddev.readthedocs.io
-Support: https://ddev.readthedocs.io/en/stable/users/support`,
+Support: https://ddev.readthedocs.io/en/stable/users/support/`,
 	Version: versionconstants.DdevVersion,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		command := os.Args[1]
@@ -45,14 +43,16 @@ Support: https://ddev.readthedocs.io/en/stable/users/support`,
 		cmdCopy := *cmd
 		argsCopy := args
 		if IsUserDefinedCustomCommand(&cmdCopy) {
-			cmdCopy.Use = "custom-command"
+			cmdCopy = cobra.Command{Use: "custom-command"}
 			argsCopy = []string{}
 		}
 
 		// We don't want to send to amplitude if using --json-output
 		// That captures an enormous number of PhpStorm running the
 		// ddev describe -j over and over again.
-		if !output.JSONOutput {
+		// And we don't want to send __complete commands,
+		// that are called each time you press <TAB>.
+		if !output.JSONOutput && cmdCopy.Name() != cobra.ShellCompRequestCmd {
 			amplitude.TrackCommand(&cmdCopy, argsCopy)
 		}
 
@@ -96,11 +96,11 @@ Support: https://ddev.readthedocs.io/en/stable/users/support`,
 			}
 
 			if updateNeeded {
-				output.UserOut.Printf(util.ColorizeText(fmt.Sprintf("\n\nUpgraded DDEV %s is available!\nPlease visit %s to get the upgrade.\nFor upgrade help see %s\n\n", updateVersion, updateURL, updateDocURL), "green"))
+				util.Warning("\nUpgraded DDEV %s is available!\nPlease visit %s\nto get the upgrade.\nFor upgrade help see\n%s\n", updateVersion, updateURL, updateDocURL)
 			}
 		}
 	},
-	PersistentPostRun: func(cmd *cobra.Command, args []string) {
+	PersistentPostRun: func(_ *cobra.Command, _ []string) {
 		if instrumentationApp == nil {
 			app, err := ddevapp.GetActiveApp("")
 			if err == nil {
@@ -113,47 +113,6 @@ Support: https://ddev.readthedocs.io/en/stable/users/support`,
 		if instrumentationApp != nil && !output.JSONOutput {
 			instrumentationApp.TrackProject()
 		}
-
-		// TODO: Remove when we decide to stop reporting to Segment.
-		// All code to "end TODO remove once Amplitude" will be removed
-		// Do not report these commands
-		ignores := map[string]bool{"describe": true, "auth": true, "blackfire": false, "clean": true, "composer": true, "debug": true, "delete": true, "drush": true, "exec": true, "export-db": true, "get": true, "help": true, "hostname": true, "import-db": true, "import-files": true, "list": true, "logs": true, "mutagen": true, "mysql": true, "npm": true, "nvm": true, "php": true, "poweroff": true, "pull": true, "push": true, "service": true, "share": true, "snapshot": true, "ssh": true, "stop": true, "version": true, "xdebug": true, "xhprof": true, "yarn": true}
-
-		if _, ok := ignores[cmd.CalledAs()]; ok {
-			return
-		}
-
-		// All this nonsense is to capture the official usage we used for this command.
-		// Unfortunately cobra doesn't seem to provide this easily.
-		// We use the first word of Use: to get it.
-		cmdCopy := cmd
-		var fullCommand = make([]string, 0)
-		fullCommand = append(fullCommand, util.GetFirstWord(cmdCopy.Use))
-		for cmdCopy.HasParent() {
-			fullCommand = append(fullCommand, util.GetFirstWord(cmdCopy.Parent().Use))
-			cmdCopy = cmdCopy.Parent()
-		}
-		for i := 0; i < len(fullCommand)/2; i++ {
-			j := len(fullCommand) - i - 1
-			fullCommand[i], fullCommand[j] = fullCommand[j], fullCommand[i]
-		}
-
-		event := ""
-		if len(fullCommand) > 1 {
-			event = fullCommand[1]
-		}
-
-		if globalconfig.DdevGlobalConfig.InstrumentationOptIn && versionconstants.SegmentKey != "" && globalconfig.IsInternetActive() && len(fullCommand) > 1 {
-			defer util.TimeTrackC("Instrumentation")()
-
-			// If instrumentationApp has been set, provide the tags, otherwise no app tags
-			if instrumentationApp != nil {
-				instrumentationApp.SetInstrumentationAppTags()
-			}
-			ddevapp.SetInstrumentationBaseTags()
-			ddevapp.SendInstrumentationEvents(event)
-		}
-		// End TODO remove once Amplitude has verified with an alpha release.
 	},
 }
 
@@ -168,6 +127,7 @@ func Execute() {
 func init() {
 
 	RootCmd.PersistentFlags().BoolVarP(&output.JSONOutput, "json-output", "j", false, "If true, user-oriented output will be in JSON format.")
+	RootCmd.PersistentFlags().BoolVarP(&ddevapp.SkipHooks, "skip-hooks", "", false, "If true, any hook normally run by the command will be skipped.")
 
 	output.LogSetUp()
 
@@ -176,14 +136,12 @@ func init() {
 	_, err := dockerutil.GetDockerVersion()
 	// ddev --version may be called without Docker available.
 	if err != nil && len(os.Args) > 1 && os.Args[1] != "--version" && os.Args[1] != "hostname" {
-		util.Failed("Could not connect to a Docker provider. Please start or install a Docker provider.\nFor install help go to: https://ddev.readthedocs.io/en/latest/users/install/")
+		util.Failed("Could not connect to a Docker provider. Please start or install a Docker provider.\nFor install help go to: https://ddev.readthedocs.io/en/stable/users/install/docker-installation/")
 	}
 
 	// Populate custom/script commands so they're visible.
-	// We really don't want ~/.ddev or .ddev/homeadditions or .ddev/.globalcommands to have root ownership, breaks things.
-	if os.Geteuid() == 0 {
-		util.Warning("Not populating custom commands or hostadditions because running with root privileges")
-	} else {
+	// We really don't want ~/.ddev or .ddev/homeadditions to have root ownership, breaks things.
+	if os.Geteuid() != 0 {
 		err := ddevapp.PopulateExamplesCommandsHomeadditions("")
 		if err != nil {
 			util.Warning("populateExamplesAndCommands() failed: %v", err)
@@ -194,6 +152,8 @@ func init() {
 			util.Warning("Adding custom/shell commands failed: %v", err)
 		}
 	}
+
+	setHelpFunc(RootCmd)
 }
 
 // checkDdevVersionAndOptInInstrumentation() reads global config and checks to see if current version is different
@@ -201,22 +161,12 @@ func init() {
 // and update the info.
 func checkDdevVersionAndOptInInstrumentation(skipConfirmation bool) error {
 	if !output.JSONOutput && semver.Compare(versionconstants.DdevVersion, globalconfig.DdevGlobalConfig.LastStartedVersion) > 0 && globalconfig.DdevGlobalConfig.InstrumentationOptIn == false && !globalconfig.DdevNoInstrumentation && !skipConfirmation {
-		allowStats := util.Confirm("It looks like you have a new DDEV release.\nMay we send anonymous DDEV usage statistics and errors?\nTo know what we will see please take a look at\nhttps://ddev.readthedocs.io/en/latest/users/usage/diagnostics/#opt-in-usage-information\nPermission to beam up?")
+		allowStats := util.Confirm("It looks like you have a new DDEV release.\nMay we send anonymous DDEV usage statistics and errors?\nTo know what we will see please take a look at\nhttps://ddev.readthedocs.io/en/stable/users/usage/diagnostics/#opt-in-usage-information\nPermission to beam up?")
 		if allowStats {
 			globalconfig.DdevGlobalConfig.InstrumentationOptIn = true
-			client, _ := analytics.NewWithConfig(versionconstants.SegmentKey, analytics.Config{
-				Logger: &ddevapp.SegmentNoopLogger{},
-			})
-			defer func() {
-				_ = client.Close()
-			}()
-
-			err := ddevapp.SegmentUser(client, ddevapp.GetInstrumentationUser())
-			if err != nil {
-				output.UserOut.Debugf("error in SegmentUser: %v", err)
-			}
 		}
 	}
+
 	if globalconfig.DdevGlobalConfig.LastStartedVersion != versionconstants.DdevVersion && !skipConfirmation {
 
 		// If they have a new version (but not first-timer) then prompt to poweroff
@@ -226,8 +176,6 @@ func checkDdevVersionAndOptInInstrumentation(skipConfirmation bool) error {
 			if okPoweroff {
 				ddevapp.PowerOff()
 			}
-			util.Debug("Terminating all Mutagen sync sessions")
-			ddevapp.TerminateAllMutagenSync()
 		}
 
 		// If they have a new version write the new version into last-started

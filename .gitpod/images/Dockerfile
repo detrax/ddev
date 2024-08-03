@@ -4,7 +4,7 @@ SHELL ["/bin/bash", "-c"]
 USER root
 
 RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
-RUN echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_18.x nodistro main" > /etc/apt/sources.list.d/nodesource.list
+RUN echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" > /etc/apt/sources.list.d/nodesource.list
 
 RUN install -m 0755 -d /etc/apt/keyrings
 RUN curl -fsSL https://pkg.ddev.com/apt/gpg.key | gpg --dearmor | sudo tee /etc/apt/keyrings/ddev.gpg > /dev/null
@@ -25,7 +25,12 @@ RUN echo 'if [ -r "/home/linuxbrew/.linuxbrew/etc/profile.d/bash_completion.sh" 
 RUN echo 'export PATH=~/bin:$PATH' >>~/.bashrc && mkdir -p ~/bin
 RUN echo ". /usr/share/autojump/autojump.sh" >> ~/.bashrc
 RUN ln -sf /workspace/ddev/.gotmp/bin/linux_amd64/ddev ~/bin/ddev
-RUN mkdir -p ~/.ddev && echo "omit_containers: [ddev-router,ddev-ssh-agent]" >> ~/.ddev/global_config.yaml
+# Use a non-volatile global config location
+ENV XDG_CONFIG_HOME=/workspace/.config
+RUN mkdir -p ${XDG_CONFIG_HOME}/ddev && echo "omit_containers: [ddev-router]" >> ${XDG_CONFIG_HOME}/ddev/global_config.yaml
+# Make a link to the previous global config location,
+# in case someone has hardcoded it in their projects somewhere, e.g. in hooks
+RUN ln -sf ${XDG_CONFIG_HOME}/ddev ~/.ddev
 RUN sudo apt-get clean && sudo rm -rf /var/lib/apt/lists/*
 
 # a gcc instance named gcc-5 is required for some vscode installations

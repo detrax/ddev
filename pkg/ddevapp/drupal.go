@@ -2,20 +2,23 @@ package ddevapp
 
 import (
 	"fmt"
-	"github.com/ddev/ddev/pkg/dockerutil"
-	"github.com/ddev/ddev/pkg/nodeps"
-	"github.com/ddev/ddev/pkg/output"
-	"github.com/ddev/ddev/pkg/util"
-
 	"os"
 	"path"
 	"path/filepath"
 	"text/template"
 
-	"github.com/ddev/ddev/pkg/fileutil"
-
 	"github.com/ddev/ddev/pkg/archive"
+	"github.com/ddev/ddev/pkg/dockerutil"
+	"github.com/ddev/ddev/pkg/fileutil"
+	"github.com/ddev/ddev/pkg/nodeps"
+	"github.com/ddev/ddev/pkg/output"
+	"github.com/ddev/ddev/pkg/util"
+	copy2 "github.com/otiai10/copy"
 )
+
+// DefaultDrupalSettingsVersion is the version used for settings.php/settings.ddev.php
+// when no known Drupal version is detected
+const DefaultDrupalSettingsVersion = "10"
 
 // DrupalSettings encapsulates all the configurations for a Drupal site.
 type DrupalSettings struct {
@@ -78,7 +81,7 @@ if (getenv('IS_DDEV_PROJECT') == 'true' && is_readable($ddev_settings)) {
 `
 
 // manageDrupalSettingsFile will direct inspecting and writing of settings.php.
-func manageDrupalSettingsFile(app *DdevApp, drupalConfig *DrupalSettings, appType string) error {
+func manageDrupalSettingsFile(app *DdevApp, drupalConfig *DrupalSettings) error {
 	// We'll be writing/appending to the settings files and parent directory, make sure we have permissions to do so
 	if err := drupalEnsureWritePerms(app); err != nil {
 		return err
@@ -87,7 +90,7 @@ func manageDrupalSettingsFile(app *DdevApp, drupalConfig *DrupalSettings, appTyp
 	if !fileutil.FileExists(app.SiteSettingsPath) {
 		output.UserOut.Printf("No %s file exists, creating one", drupalConfig.SiteSettings)
 
-		if err := writeDrupalSettingsPHP(app.SiteSettingsPath, appType); err != nil {
+		if err := writeDrupalSettingsPHP(app); err != nil {
 			return fmt.Errorf("failed to write: %v", err)
 		}
 	}
@@ -102,7 +105,7 @@ func manageDrupalSettingsFile(app *DdevApp, drupalConfig *DrupalSettings, appTyp
 	} else {
 		util.Debug("Existing %s file does not include %s, modifying to include DDEV settings", drupalConfig.SiteSettings, drupalConfig.SiteSettingsDdev)
 
-		if err := appendIncludeToDrupalSettingsFile(app.SiteSettingsPath, app.Type); err != nil {
+		if err := appendIncludeToDrupalSettingsFile(app); err != nil {
 			return fmt.Errorf("failed to include %s in %s: %v", drupalConfig.SiteSettingsDdev, drupalConfig.SiteSettings, err)
 		}
 	}
@@ -111,15 +114,27 @@ func manageDrupalSettingsFile(app *DdevApp, drupalConfig *DrupalSettings, appTyp
 }
 
 // writeDrupalSettingsPHP creates the project's settings.php if it doesn't exist
-func writeDrupalSettingsPHP(filePath string, appType string) error {
+func writeDrupalSettingsPHP(app *DdevApp) error {
+
+	var appType string
+	if app.Type == nodeps.AppTypeBackdrop {
+		appType = app.Type
+	} else {
+		drupalVersion, err := GetDrupalVersion(app)
+		if err != nil || drupalVersion == "" {
+			drupalVersion = DefaultDrupalSettingsVersion
+		}
+		appType = "drupal" + drupalVersion
+	}
+
 	content, err := bundledAssets.ReadFile(path.Join("drupal", appType, "settings.php"))
 	if err != nil {
 		return err
 	}
 
 	// Ensure target directory exists and is writable
-	dir := filepath.Dir(filePath)
-	if err = os.Chmod(dir, 0755); os.IsNotExist(err) {
+	dir := filepath.Dir(app.SiteSettingsPath)
+	if err = util.Chmod(dir, 0755); os.IsNotExist(err) {
 		if err = os.MkdirAll(dir, 0755); err != nil {
 			return err
 		}
@@ -128,7 +143,7 @@ func writeDrupalSettingsPHP(filePath string, appType string) error {
 	}
 
 	// Create file
-	err = os.WriteFile(filePath, content, 0755)
+	err = os.WriteFile(app.SiteSettingsPath, content, 0755)
 	if err != nil {
 		return err
 	}
@@ -144,7 +159,7 @@ func createDrupalSettingsPHP(app *DdevApp) (string, error) {
 	// we may want to do some kind of customization in the future.
 	drupalConfig := NewDrupalSettings(app)
 
-	if err := manageDrupalSettingsFile(app, drupalConfig, app.Type); err != nil {
+	if err := manageDrupalSettingsFile(app, drupalConfig); err != nil {
 		return "", err
 	}
 
@@ -172,14 +187,18 @@ func writeDrupalSettingsDdevPhp(settings *DrupalSettings, filePath string, app *
 		}
 	}
 
-	t, err := template.New("settings.ddev.php").ParseFS(bundledAssets, path.Join("drupal", app.Type, "settings.ddev.php"))
+	drupalVersion, err := GetDrupalVersion(app)
+	if err != nil || drupalVersion == "" {
+		drupalVersion = DefaultDrupalSettingsVersion
+	}
+	t, err := template.New("settings.ddev.php").ParseFS(bundledAssets, path.Join("drupal", "drupal"+drupalVersion, "settings.ddev.php"))
 	if err != nil {
 		return err
 	}
 
 	// Ensure target directory exists and is writable
 	dir := filepath.Dir(filePath)
-	if err = os.Chmod(dir, 0755); os.IsNotExist(err) {
+	if err = util.Chmod(dir, 0755); os.IsNotExist(err) {
 		if err = os.MkdirAll(dir, 0755); err != nil {
 			return err
 		}
@@ -233,7 +252,7 @@ if (getenv('IS_DDEV_PROJECT') == 'true') {
 
 	// Ensure target directory exists and is writable
 	dir := filepath.Dir(filePath)
-	if err := os.Chmod(dir, 0755); os.IsNotExist(err) {
+	if err := util.Chmod(dir, 0755); os.IsNotExist(err) {
 		if err = os.MkdirAll(dir, 0755); err != nil {
 			return err
 		}
@@ -256,10 +275,11 @@ func getDrupalUploadDirs(_ *DdevApp) []string {
 	return uploadDirs
 }
 
-// Drupal8Hooks adds a d8-specific hooks example for post-import-db
-const Drupal8Hooks = `# post-import-db:
-#   - exec: drush cr
-#   - exec: drush updb
+// DrupalHooks adds d8+-specific hooks example for post-import-db
+const DrupalHooks = `# post-import-db:
+#   - exec: drush sql:sanitize
+#   - exec: drush updatedb
+#   - exec: drush cache:rebuild
 `
 
 // Drupal7Hooks adds a d7-specific hooks example for post-import-db
@@ -278,9 +298,9 @@ func getDrupal6Hooks() []byte {
 	return []byte(Drupal7Hooks)
 }
 
-// getDrupal8Hooks for appending as byte array
-func getDrupal8Hooks() []byte {
-	return []byte(Drupal8Hooks)
+// getDrupalHooks for appending as byte array
+func getDrupalHooks() []byte {
+	return []byte(DrupalHooks)
 }
 
 // setDrupalSiteSettingsPaths sets the paths to settings.php/settings.ddev.php
@@ -300,28 +320,31 @@ func isDrupal7App(app *DdevApp) bool {
 	return false
 }
 
-// isDrupal8App returns true if the app is of type drupal8
-func isDrupal8App(app *DdevApp) bool {
-	isD8, err := fileutil.FgrepStringInFile(filepath.Join(app.AppRoot, app.Docroot, "core/lib/Drupal.php"), `const VERSION = '8`)
-	if err == nil && isD8 {
-		return true
+// GetDrupalVersion finds the drupal8+ version so it can be used
+// for setting requirements.
+// It can only work if there is configured Drupal8+ code
+func GetDrupalVersion(app *DdevApp) (string, error) {
+	// For drupal6/7 we use the apptype provided as version
+	switch app.Type {
+	case nodeps.AppTypeDrupal6:
+		return "6", nil
+	case nodeps.AppTypeDrupal7:
+		return "7", nil
 	}
-	return false
+	// Otherwise figure out the version from existing code
+	f := filepath.Join(app.AppRoot, app.Docroot, "core/lib/Drupal.php")
+	hasVersion, matches, err := fileutil.GrepStringInFile(f, `const VERSION = '([0-9]+)`)
+	v := ""
+	if hasVersion {
+		v = matches[1]
+	}
+	return v, err
 }
 
-// isDrupal9App returns true if the app is of type drupal9
-func isDrupal9App(app *DdevApp) bool {
-	isD9, err := fileutil.FgrepStringInFile(filepath.Join(app.AppRoot, app.Docroot, "core/lib/Drupal.php"), `const VERSION = '9`)
-	if err == nil && isD9 {
-		return true
-	}
-	return false
-}
-
-// isDrupal10App returns true if the app is of type drupal10
-func isDrupal10App(app *DdevApp) bool {
-	isD10, err := fileutil.FgrepStringInFile(filepath.Join(app.AppRoot, app.Docroot, "core/lib/Drupal.php"), `const VERSION = '10`)
-	if err == nil && isD10 {
+// isDrupalApp returns true if the app is drupal
+func isDrupalApp(app *DdevApp) bool {
+	v, err := GetDrupalVersion(app)
+	if err == nil && v != "" {
 		return true
 	}
 	return false
@@ -335,50 +358,52 @@ func isDrupal6App(app *DdevApp) bool {
 	return false
 }
 
-// drupal6ConfigOverrideAction overrides php_version for D6, since it is incompatible
-// with php7+
+// drupal6ConfigOverrideAction overrides php_version for D6
 func drupal6ConfigOverrideAction(app *DdevApp) error {
 	app.PHPVersion = nodeps.PHP56
 	return nil
 }
 
-func drupal8ConfigOverrideAction(app *DdevApp) error {
-	app.PHPVersion = nodeps.PHP74
+// drupal7ConfigOverrideAction overrides php_version for D7
+func drupal7ConfigOverrideAction(app *DdevApp) error {
+	app.PHPVersion = nodeps.PHP82
 	return nil
 }
 
-// drupal0ConfigOverrideAction overrides php_version for D10, requires PHP8.0
-//func drupal9ConfigOverrideAction(app *DdevApp) error {
-//	app.PHPVersion = nodeps.PHP80
-//	return nil
-//}
-
-// drupal10ConfigOverrideAction overrides php_version for D10, requires PHP8.0
-func drupal10ConfigOverrideAction(app *DdevApp) error {
-	app.PHPVersion = nodeps.PHP81
-	return nil
-}
-
-// drupal8PostStartAction handles default post-start actions for D8 apps, like ensuring
-// useful permissions settings on sites/default.
-func drupal8PostStartAction(app *DdevApp) error {
-	// Return early because we aren't expected to manage settings.
-	if app.DisableSettingsManagement {
+// drupalConfigOverrideAction selects proper versions for
+func drupalConfigOverrideAction(app *DdevApp) error {
+	v, err := GetDrupalVersion(app)
+	if err != nil || v == "" {
+		util.Warning("Unable to detect Drupal version, continuing")
 		return nil
 	}
-	if err := createDrupal8SyncDir(app); err != nil {
-		return err
+	// If there is no database, update it to the default one,
+	// otherwise show a warning to the user.
+	if !nodeps.ArrayContainsString(app.GetOmittedContainers(), "db") {
+		if dbType, err := app.GetExistingDBType(); err == nil && dbType == "" {
+			app.Database = DatabaseDefault
+		} else if app.Database != DatabaseDefault && v != "8" {
+			defaultType := DatabaseDefault.Type + ":" + DatabaseDefault.Version
+			util.Warning("Default database type is %s, but the current actual database type is %s, you may want to migrate with 'ddev debug migrate-database %s'.", defaultType, dbType, defaultType)
+		}
 	}
-
-	//nolint: revive
-	if err := drupalEnsureWritePerms(app); err != nil {
-		return err
+	switch v {
+	case "8":
+		app.PHPVersion = nodeps.PHP74
+		app.Database = DatabaseDesc{Type: nodeps.MariaDB, Version: nodeps.MariaDB104}
+	case "9":
+		app.PHPVersion = nodeps.PHP81
+	case "10":
+		app.PHPVersion = nodeps.PHP83
+	case "11":
+		app.PHPVersion = nodeps.PHP83
+		app.CorepackEnable = true
 	}
 	return nil
 }
 
 func drupalPostStartAction(app *DdevApp) error {
-	if !nodeps.ArrayContainsString(app.GetOmittedContainers(), "db") && (isDrupal9App(app) || isDrupal10App(app)) {
+	if !nodeps.ArrayContainsString(app.GetOmittedContainers(), "db") && (isDrupalApp(app)) {
 		err := app.Wait([]string{nodeps.DBContainer})
 		if err != nil {
 			return err
@@ -483,7 +508,7 @@ func drupalEnsureWritePerms(app *DdevApp) error {
 			continue
 		}
 
-		if err := os.Chmod(o, stat.Mode()|writePerms); err != nil {
+		if err := util.Chmod(o, stat.Mode()|writePerms); err != nil {
 			// Warn the user, but continue.
 			util.Warning("Unable to set permissions: %v", err)
 		}
@@ -523,20 +548,20 @@ func settingsHasInclude(drupalConfig *DrupalSettings, siteSettingsPath string) (
 
 // appendIncludeToDrupalSettingsFile modifies the settings.php file to include the settings.ddev.php
 // file, which contains ddev-specific configuration.
-func appendIncludeToDrupalSettingsFile(siteSettingsPath string, appType string) error {
+func appendIncludeToDrupalSettingsFile(app *DdevApp) error {
 	// Check if file is empty
-	contents, err := os.ReadFile(siteSettingsPath)
+	contents, err := os.ReadFile(app.SiteSettingsPath)
 	if err != nil {
 		return err
 	}
 
 	// If the file is empty, write the complete settings file and return
 	if len(contents) == 0 {
-		return writeDrupalSettingsPHP(siteSettingsPath, appType)
+		return writeDrupalSettingsPHP(app)
 	}
 
 	// The file is not empty, open it for appending
-	file, err := os.OpenFile(siteSettingsPath, os.O_RDWR|os.O_APPEND, 0644)
+	file, err := os.OpenFile(app.SiteSettingsPath, os.O_RDWR|os.O_APPEND, 0644)
 	if err != nil {
 		return err
 	}
@@ -559,13 +584,15 @@ func drupalImportFilesAction(app *DdevApp, uploadDir, importPath, extPath string
 	}
 
 	// Parent of destination dir should be writable.
-	if err := os.Chmod(filepath.Dir(destPath), 0755); err != nil {
+	if err := util.Chmod(filepath.Dir(destPath), 0755); err != nil {
 		return err
 	}
 
-	// If the destination path exists, remove it as was warned
+	// If the destination path exists, remove contents as was warned
+	// We do not remove the directory as it may be a docker bind-mount in
+	// various situations, especially when mutagen is in use.
 	if fileutil.FileExists(destPath) {
-		if err := os.RemoveAll(destPath); err != nil {
+		if err := fileutil.PurgeDirectory(destPath); err != nil {
 			return fmt.Errorf("failed to cleanup %s before import: %v", destPath, err)
 		}
 	}
@@ -586,10 +613,31 @@ func drupalImportFilesAction(app *DdevApp, uploadDir, importPath, extPath string
 		return nil
 	}
 
-	//nolint: revive
-	if err := fileutil.CopyDir(importPath, destPath); err != nil {
+	if err := copy2.Copy(importPath, destPath); err != nil {
 		return err
 	}
 
 	return nil
+}
+
+// getDrupalComposerCreateAllowedPaths returns fullpaths that are allowed to be present when running composer create
+func getDrupalComposerCreateAllowedPaths(app *DdevApp) ([]string, error) {
+	var allowed []string
+
+	// Return early because we aren't expected to manage settings.
+	if app.DisableSettingsManagement {
+		return []string{}, nil
+	}
+
+	drupalConfig := NewDrupalSettings(app)
+
+	if app.Type == "drupal6" || app.Type == "drupal7" {
+		// drushrc.php path
+		allowed = append(allowed, filepath.Join(filepath.Dir(app.SiteSettingsPath), "drushrc.php"))
+	} else {
+		// Sync path
+		allowed = append(allowed, path.Join(app.GetDocroot(), "sites/default", drupalConfig.SyncDir))
+	}
+
+	return allowed, nil
 }

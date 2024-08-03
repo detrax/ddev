@@ -13,9 +13,10 @@ import (
 // NewImportDBCmd initializes and returns the `ddev import-db` command.
 func NewImportDBCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "import-db [project]",
-		Args:  cobra.RangeArgs(0, 1),
-		Short: "Import a SQL dump file into the project",
+		ValidArgsFunction: ddevapp.GetProjectNamesFunc("all", 1),
+		Use:               "import-db [project]",
+		Args:              cobra.RangeArgs(0, 1),
+		Short:             "Import a SQL dump file into the project",
 		Long: heredoc.Doc(`
 			Import a SQL dump file into the project.
 
@@ -41,7 +42,7 @@ func NewImportDBCmd() *cobra.Command {
 			$ ddev import-db my-project < db.sql
 			$ gzip -dc db.sql.gz | ddev import-db
 		`),
-		PreRun: func(cmd *cobra.Command, args []string) {
+		PreRun: func(_ *cobra.Command, _ []string) {
 			dockerutil.EnsureDdevNetwork()
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {

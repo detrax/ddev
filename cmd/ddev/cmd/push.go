@@ -26,7 +26,7 @@ ddev push acquia --skip-db -y
 ddev push platform --environment=PLATFORM_ENVIRONMENT=main,PLATFORMSH_CLI_TOKEN=abcdef
 `,
 	Args: cobra.ExactArgs(1),
-	PreRun: func(cmd *cobra.Command, args []string) {
+	PreRun: func(_ *cobra.Command, _ []string) {
 		dockerutil.EnsureDdevNetwork()
 	},
 }
@@ -50,7 +50,7 @@ func apppush(providerType string, app *ddevapp.DdevApp, skipConfirmation bool, s
 		}
 
 		util.Warning("You're about to push your local %s to your upstream production\nand replace it with your local project's %s.\nThis is normally a very dangerous operation.", message, message)
-		if !util.Confirm("Would you like to continue (not recommended)?") {
+		if !util.ConfirmTo("Would you like to continue (not recommended)?", false) {
 			util.Failed("Push cancelled")
 		}
 	}
@@ -99,7 +99,7 @@ func init() {
 ddev push %s -y
 ddev push %s --skip-files -y`, subCommandName, subCommandName, subCommandName),
 			Args: cobra.ExactArgs(0),
-			Run: func(cmd *cobra.Command, args []string) {
+			Run: func(cmd *cobra.Command, _ []string) {
 				app, err := ddevapp.GetActiveApp("")
 				if err != nil {
 					util.Failed("push failed: %v", err)
@@ -122,6 +122,13 @@ ddev push %s --skip-files -y`, subCommandName, subCommandName, subCommandName),
 
 				apppush(providerName, app, flags["skip-confirmation"], flags["skip-import"], flags["skip-db"], flags["skip-files"], environment)
 			},
+		}
+		// Mark custom command
+		if !ddevapp.IsBundledCustomProvider(subCommandName) {
+			if subCommand.Annotations == nil {
+				subCommand.Annotations = map[string]string{}
+			}
+			subCommand.Annotations[CustomCommand] = "true"
 		}
 		PushCmd.AddCommand(subCommand)
 		subCommand.Flags().BoolP("skip-confirmation", "y", false, "Skip confirmation step")

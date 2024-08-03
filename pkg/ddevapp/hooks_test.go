@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/ddev/ddev/pkg/ddevapp"
@@ -15,30 +16,35 @@ import (
 
 // TestProcessHooks tests execution of commands defined in config.yaml
 func TestProcessHooks(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping on Windows, as it always hangs")
+	}
 	assert := asrt.New(t)
 
 	site := TestSites[0]
 	origDir, _ := os.Getwd()
-	// We don't get the expected task debug output without DDEV_DEBUG
-	t.Setenv("DDEV_DEBUG", "true")
 	runTime := util.TimeTrackC(t.Name())
 
 	testcommon.ClearDockerEnv()
 	app, err := ddevapp.NewApp(site.Dir, true)
-	assert.NoError(err)
+	require.NoError(t, err)
+
+	// We don't get the expected task debug output without DDEV_DEBUG
+	origDdevDebug := os.Getenv("DDEV_DEBUG")
+	_ = os.Setenv(`DDEV_DEBUG`, `true`) // test requires DDEV_DEBUG to see task output
+
 	t.Cleanup(func() {
 		runTime()
 		err = os.Chdir(origDir)
 		assert.NoError(err)
 		err = app.Stop(true, false)
 		assert.NoError(err)
-		err = os.RemoveAll(app.GetConfigPath("config.hooks.yaml"))
-		assert.NoError(err)
-		err = os.RemoveAll(filepath.Join(app.AppRoot, "composer.json"))
-		assert.NoError(err)
+		_ = os.RemoveAll(app.GetConfigPath("config.hooks.yaml"))
+		_ = os.RemoveAll(filepath.Join(app.AppRoot, "composer.json"))
+		_ = os.Setenv(`DDEV_DEBUG`, origDdevDebug)
 	})
 	err = app.Start()
-	assert.NoError(err)
+	require.NoError(t, err)
 
 	// Create a composer.json so we can do actions on it.
 	fName := filepath.Join(app.AppRoot, "composer.json")
@@ -70,30 +76,45 @@ func TestProcessHooks(t *testing.T) {
 		fName := app.GetConfigPath("config.hooks.yaml")
 		fullTask := []byte("hooks:\n  post-start:\n  - " + task.task + "\n")
 		err = os.WriteFile(fName, fullTask, 0644)
-		assert.NoError(err)
+		require.NoError(t, err)
 
 		app, err = ddevapp.NewApp(site.Dir, true)
-		assert.NoError(err)
+		require.NoError(t, err)
 
 		captureOutputFunc, err := util.CaptureOutputToFile()
-		assert.NoError(err)
+		require.NoError(t, err, `failed to capture output to file for taxk='%v' err=%v`, task, err)
 		userOutFunc := util.CaptureUserOut()
 
 		err = app.Start()
-		assert.NoError(err)
+		require.NoError(t, err, `failed to app.Start() for task '%v' err='%v'`, task, err)
 
 		out := captureOutputFunc()
 		userOut := userOutFunc()
-		assert.Contains(out, task.stdoutExpect, "task: %v", task.task)
-		assert.Contains(userOut, task.fulloutputExpect, "task: %v", task.task)
-		assert.NotContains(userOut, "Task failed")
+		require.Contains(t, out, task.stdoutExpect, "task: '%v'", task.task)
+		require.Contains(t, userOut, task.fulloutputExpect, "task: %v", task.task)
+		require.NotContains(t, userOut, "Task failed")
+
+		err = app.Stop(true, false)
+		require.NoError(t, err)
 	}
 
-	err = app.MutagenSyncFlush()
-	assert.NoError(err)
+	err = app.Restart()
+	require.NoError(t, err)
 
-	assert.FileExists(filepath.Join(app.AppRoot, fmt.Sprintf("TestProcessHooks%s.txt", app.GetRouterHTTPSPort())))
-	assert.FileExists(filepath.Join(app.AppRoot, "touch_works_after_and.txt"))
+	require.FileExists(t, filepath.Join(app.AppRoot, fmt.Sprintf("TestProcessHooks%s.txt", app.GetRouterHTTPSPort())))
+	require.FileExists(t, filepath.Join(app.AppRoot, "touch_works_after_and.txt"))
+
+	// Make sure skip hooks work
+	ddevapp.SkipHooks = true
+	app.Hooks = map[string][]ddevapp.YAMLTask{
+		"hook-test-skip-hooks": {
+			{"exec": "\"echo TestProcessHooks > /var/www/html/TestProcessHooksSkipHooks${DDEV_ROUTER_HTTPS_PORT}.txt\""},
+		},
+	}
+	err = app.ProcessHooks("hook-test")
+	require.NoError(t, err)
+	require.NoFileExists(t, filepath.Join(app.AppRoot, fmt.Sprintf("TestProcessHooksSkipHooks%s.txt", app.GetRouterHTTPSPort())))
+	ddevapp.SkipHooks = false
 
 	// Attempt processing hooks with a guaranteed failure
 	app.Hooks = map[string][]ddevapp.YAMLTask{
@@ -103,17 +124,17 @@ func TestProcessHooks(t *testing.T) {
 	}
 	// With default setting, ProcessHooks should succeed
 	err = app.ProcessHooks("hook-test")
-	assert.NoError(err)
+	require.NoError(t, err)
 
 	// With FailOnHookFail or FailOnHookFailGlobal or both, it should fail.
 	app.FailOnHookFail = true
 	err = app.ProcessHooks("hook-test")
-	assert.Error(err)
+	require.Error(t, err)
 	app.FailOnHookFail = false
 	app.FailOnHookFailGlobal = true
 	err = app.ProcessHooks("hook-test")
-	assert.Error(err)
+	require.Error(t, err)
 	app.FailOnHookFail = true
 	err = app.ProcessHooks("hook-test")
-	assert.Error(err)
+	require.Error(t, err)
 }

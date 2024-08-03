@@ -95,8 +95,7 @@ func TestArchiveTar(t *testing.T) {
 			// Could not figure out what causes this not to be removable
 			//err = os.Remove(tarballFile.Name())
 			//assert.NoError(err)
-			err = os.RemoveAll(tmpDir)
-			assert.NoError(err)
+			_ = os.RemoveAll(tmpDir)
 		})
 	err = archive.Untar(tarballFile.Name(), tmpDir, "")
 	assert.NoError(err)
@@ -131,8 +130,7 @@ func TestArchiveTarGz(t *testing.T) {
 			// Could not figure out what causes this not to be removable
 			//err = os.Remove(tarballFile.Name())
 			//assert.NoError(err)
-			err = os.RemoveAll(tmpDir)
-			assert.NoError(err)
+			_ = os.RemoveAll(tmpDir)
 		})
 	err = archive.Untar(tarballFile.Name(), tmpDir, "")
 	assert.NoError(err)
@@ -168,7 +166,7 @@ func TestExtractTarballWithCleanup(t *testing.T) {
 func TestDownloadAndExtractTarball(t *testing.T) {
 	assert := asrt.New(t)
 
-	testTarball := "https://github.com/ddev/ddev-drupal9-solr/archive/refs/tags/v0.1.1.tar.gz"
+	testTarball := "https://github.com/ddev/ddev-drupal-solr/archive/refs/tags/v1.2.3.tar.gz"
 
 	dir, cleanup, err := archive.DownloadAndExtractTarball(testTarball, true)
 	require.NoError(t, err)

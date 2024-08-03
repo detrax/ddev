@@ -1,18 +1,18 @@
 # yaml-language-server: $schema=https://squidfunk.github.io/mkdocs-material/schema.json
 site_name: DDEV Docs
 # todo: Make sure to set this to the correct one; otherwise it breaks 404 page
-site_url: https://ddev.readthedocs.io/en/latest/
+site_url: https://ddev.readthedocs.io/en/stable/
 repo_url: https://github.com/ddev/ddev
 repo_name: ddev/ddev
 edit_uri: blob/master/docs/content
-copyright: Localdev Foundation
+copyright: DDEV Foundation
 extra_javascript:
 - 'assets/jquery-3.5.1.min.js'
 #- 'assets/extra.js'
 - 'assets/temp-fix-header-links-in-tabs.js'
 extra_css:
 - 'assets/extra.css'
-site_author: Localdev Foundation
+site_author: DDEV Foundation
 site_description: >-
   Do local website development on your computer or in the cloud with DDEV.
 docs_dir: docs/content
@@ -24,7 +24,27 @@ theme:
   icon:
     edit: material/pencil
   palette:
-  - scheme: default
+  # Palette toggle for automatic mode
+  - media: "(prefers-color-scheme)"
+    toggle:
+      icon: material/brightness-auto
+      name: Switch to light mode
+    primary: indigo
+    accent: indigo
+  # Palette toggle for light mode
+  - media: "(prefers-color-scheme: light)"
+    scheme: default
+    toggle:
+      icon: material/brightness-7
+      name: Switch to dark mode
+    primary: indigo
+    accent: indigo
+  # Palette toggle for dark mode
+  - media: "(prefers-color-scheme: dark)"
+    scheme: slate
+    toggle:
+      icon: material/brightness-4
+      name: Switch to system preference
     primary: indigo
     accent: indigo
   features:
@@ -43,8 +63,6 @@ theme:
 #  - toc.integrate
   - navigation.footer
   - search.suggest
-  - search.highlight
-  - search.share
   favicon: favicon.png
   # readthedocs doesn't seem to do logo css right
 #  logo: /logo.svg
@@ -52,6 +70,7 @@ theme:
 # Plugins
 plugins:
 - search
+- privacy
 - redirects:
     redirect_maps:
 - minify:
@@ -69,7 +88,7 @@ extra:
   - icon: fontawesome/brands/github
     link: https://github.com/ddev/ddev
   - icon: fontawesome/brands/discord
-    link: https://discord.gg/hCZFfAMc5k
+    link: https://discord.gg/5wjP76mBJD
   - icon: fontawesome/brands/stack-overflow
     link: https://stackoverflow.com/tags/ddev
   - icon: fontawesome/brands/twitter
@@ -77,6 +96,7 @@ extra:
   generator: false
   analytics:
     provider: plausible
+  version: !ENV [READTHEDOCS_VERSION_NAME, 'stable']
 
 # Extensions
 markdown_extensions:
@@ -97,8 +117,8 @@ markdown_extensions:
 - pymdownx.caret
 - pymdownx.details
 - pymdownx.emoji:
-    emoji_index: !!python/name:materialx.emoji.twemoji
-    emoji_generator: !!python/name:materialx.emoji.to_svg
+    emoji_index: !!python/name:material.extensions.emoji.twemoji
+    emoji_generator: !!python/name:material.extensions.emoji.to_svg
 - pymdownx.highlight:
     anchor_linenums: true
     extend_pygments_lang:
@@ -177,16 +197,17 @@ nav:
           - users/debugging-profiling/xhprof-profiling.md
           - users/debugging-profiling/xdebug-profiling.md
   - 'Hosting & Deployment':
-    - users/providers/index.md
-    - 'Beyond Local':
-      - users/topics/sharing.md
-      - users/topics/hosting.md
-      - users/topics/remote-docker.md
+    - users/topics/index.md
+    - users/topics/sharing.md
+    - users/topics/hosting.md
+    - users/topics/remote-docker.md
     - 'Hosting Provider Integrations':
+      - users/providers/index.md
       - 'Acquia': users/providers/acquia.md
       - 'Lagoon': users/providers/lagoon.md
       - 'Pantheon': users/providers/pantheon.md
       - 'Platform.sh': users/providers/platform.md
+      - 'Upsun': users/providers/upsun.md
   - 'Development':
       - developers/index.md
       - developers/building-contributing.md
@@ -198,3 +219,4 @@ nav:
       - developers/testing-docs.md
       - developers/writing-style-guide.md
       - developers/remote-config.md
+      - developers/maintainers.md

@@ -28,7 +28,7 @@ ddev pull platform --environment=PLATFORM_ENVIRONMENT=main,PLATFORMSH_CLI_TOKEN=
 `,
 
 	Args: cobra.ExactArgs(1),
-	PreRun: func(cmd *cobra.Command, args []string) {
+	PreRun: func(_ *cobra.Command, _ []string) {
 		dockerutil.EnsureDdevNetwork()
 	},
 }
@@ -101,7 +101,7 @@ func init() {
 ddev pull %s -y
 ddev pull %s --skip-files -y`, subCommandName, subCommandName, subCommandName),
 			Args: cobra.ExactArgs(0),
-			Run: func(cmd *cobra.Command, args []string) {
+			Run: func(cmd *cobra.Command, _ []string) {
 				app, err := ddevapp.GetActiveApp("")
 				if err != nil {
 					util.Failed("Pull failed: %v", err)
@@ -124,6 +124,13 @@ ddev pull %s --skip-files -y`, subCommandName, subCommandName, subCommandName),
 				environment, _ := cmd.Flags().GetString("environment")
 				appPull(providerName, app, flags["skip-confirmation"], flags["skip-import"], flags["skip-db"], flags["skip-files"], environment)
 			},
+		}
+		// Mark custom command
+		if !ddevapp.IsBundledCustomProvider(subCommandName) {
+			if subCommand.Annotations == nil {
+				subCommand.Annotations = map[string]string{}
+			}
+			subCommand.Annotations[CustomCommand] = "true"
 		}
 		PullCmd.AddCommand(subCommand)
 		subCommand.Flags().BoolP("skip-confirmation", "y", false, "Skip confirmation step")

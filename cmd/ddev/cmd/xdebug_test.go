@@ -27,8 +27,7 @@ func TestCmdXdebug(t *testing.T) {
 
 	// TestDdevXdebugEnabled has already tested enough versions, so limit it here.
 	// and this is a pretty limited test, doesn't do much but turn on and off
-	// TODO: Move from PHP81 to PHP82
-	phpVersions := []string{nodeps.PHP80, nodeps.PHP81}
+	phpVersions := []string{nodeps.PHP82, nodeps.PHP83}
 
 	pwd, _ := os.Getwd()
 	v := TestSites[0]
@@ -72,6 +71,22 @@ func TestCmdXdebug(t *testing.T) {
 		assert.Contains(string(out), "xdebug enabled")
 
 		out, err = exec.RunHostCommand(DdevBin, "xdebug", "off")
+		assert.NoError(err)
+		assert.Contains(string(out), "Disabled xdebug")
+
+		out, err = exec.RunHostCommand(DdevBin, "xdebug", "status")
+		assert.NoError(err)
+		assert.Contains(string(out), "xdebug disabled")
+
+		out, err = exec.RunHostCommand(DdevBin, "xdebug", "toggle")
+		assert.NoError(err)
+		assert.Contains(string(out), "Enabled xdebug")
+
+		out, err = exec.RunHostCommand(DdevBin, "xdebug", "status")
+		assert.NoError(err)
+		assert.Contains(string(out), "xdebug enabled")
+
+		out, err = exec.RunHostCommand(DdevBin, "xdebug", "toggle")
 		assert.NoError(err)
 		assert.Contains(string(out), "Disabled xdebug")
 

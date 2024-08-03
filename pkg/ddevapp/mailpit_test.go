@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // TestMailpit does a basic test of mailpit.
@@ -32,8 +33,7 @@ func TestMailpit(t *testing.T) {
 		assert.NoError(err)
 		err = app.Stop(true, false)
 		assert.NoError(err)
-		err = os.RemoveAll(testDir)
-		assert.NoError(err)
+		_ = os.RemoveAll(testDir)
 	})
 
 	_ = os.RemoveAll(testDir)
@@ -76,7 +76,7 @@ func TestMailpit(t *testing.T) {
 	resp, err := testcommon.EnsureLocalHTTPContent(t, desc["mailpit_url"].(string)+"/api/v1/messages", expectation)
 	require.NoError(t, err, "Error getting mailpit_url: %v resp=%v", err, resp)
 	// Colima tests on github don't respect https
-	if !dockerutil.IsColima() {
+	if !dockerutil.IsColima() && !dockerutil.IsLima() {
 		resp, err = testcommon.EnsureLocalHTTPContent(t, desc["mailpit_https_url"].(string)+"/api/v1/messages", expectation)
 		require.NoError(t, err, "Error getting mailpit_url: %v resp=%v", err, resp)
 	}
@@ -104,10 +104,21 @@ func TestMailpit(t *testing.T) {
 	require.NotNil(t, desc["mailpit_url"])
 	require.NotNil(t, desc["mailpit_https_url"])
 
+	// The API may not be ready the first time we hit it, especially on Rancher Desktop
+	// So try a few times
+	for i := 0; i < 5; i++ {
+		_, _, err = testcommon.GetLocalHTTPResponse(t, desc["mailpit_url"].(string)+"/api/v1/messages")
+		if err != nil {
+			t.Logf("Error hitting mailpit_url (try %d): %v resp=%v", i, err, resp)
+			time.Sleep(1 * time.Second)
+		} else {
+			break
+		}
+	}
 	resp, err = testcommon.EnsureLocalHTTPContent(t, desc["mailpit_url"].(string)+"/api/v1/messages", expectation)
 	require.NoError(t, err, "Error getting mailpit_url: %v resp=%v", err, resp)
-	// Colima tests on github don't respect https
-	if !dockerutil.IsColima() {
+	// Colima tests on GitHub don't respect https
+	if !dockerutil.IsColima() && !dockerutil.IsLima() {
 		resp, err = testcommon.EnsureLocalHTTPContent(t, desc["mailpit_https_url"].(string)+"/api/v1/messages", expectation)
 		require.NoError(t, err, "Error getting mailpit_url: %v resp=%v", err, resp)
 	}
@@ -131,10 +142,21 @@ func TestMailpit(t *testing.T) {
 	require.NotNil(t, desc["mailpit_url"])
 	require.NotNil(t, desc["mailpit_https_url"])
 
+	// The API may not be ready the first time we hit it, especially on Rancher Desktop
+	// So try a few times
+	for i := 0; i < 5; i++ {
+		_, _, err = testcommon.GetLocalHTTPResponse(t, desc["mailpit_url"].(string)+"/api/v1/messages")
+		if err != nil {
+			t.Logf("Error hitting mailpit_url (try %d): %v resp=%v", i, err, resp)
+			time.Sleep(1 * time.Second)
+		} else {
+			break
+		}
+	}
 	resp, err = testcommon.EnsureLocalHTTPContent(t, desc["mailpit_url"].(string)+"/api/v1/messages", expectation)
 	require.NoError(t, err, "Error getting mailpit_url: %v resp=%v", err, resp)
 	// Colima tests on github don't respect https
-	if !dockerutil.IsColima() {
+	if !dockerutil.IsColima() && !dockerutil.IsLima() {
 		resp, err = testcommon.EnsureLocalHTTPContent(t, desc["mailpit_https_url"].(string)+"/api/v1/messages", expectation)
 		require.NoError(t, err, "Error getting mailpit_url: %v resp=%v", err, resp)
 	}

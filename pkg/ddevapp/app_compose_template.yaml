@@ -25,7 +25,8 @@ services:
       {{ if .NoBindMounts }}
       - ddev-config:/mnt/ddev_config
       - snapshots:/mnt/snapshots
-      {{ else }} {{/* if .NoBindMounts */}}
+      {{ else }} {{/* if (not) .NoBindMounts */}}
+      # On db container ddev_config is mounted rw so we can create snapshots
       - .:/mnt/ddev_config
       - ./db_snapshots:/mnt/snapshots
       {{ end }} {{/* end if .NoBindMounts */}}
@@ -74,14 +75,16 @@ services:
       - USER={{ .Username }}
     command: ${DDEV_DB_CONTAINER_COMMAND}
     healthcheck:
-      {{ if eq .DBType "postgres" }}
+      {{- if eq .DBType "postgres" }}
       test: ["CMD-SHELL", "/postgres_healthcheck.sh"]
-      {{ end }}
-      interval: 1s
-      retries: 120
+      {{- end }}
+      interval: "1s"
+      retries: 70
       start_period: "{{ .DefaultContainerTimeout }}s"
-      start_interval: 1s
-      timeout: 70s
+      {{ if templateCanUse "healthcheck.start_interval" -}}
+      start_interval: "1s"
+      {{- end }}
+      timeout: "70s"
   {{ end }} {{/* end if not .OmitDB */}}
 
   web:
@@ -94,6 +97,7 @@ services:
         uid: '{{ .UID }}'
         gid: '{{ .GID }}'
         DDEV_PHP_VERSION: ${DDEV_PHP_VERSION}
+        DDEV_DATABASE: ${DDEV_DATABASE}
     image: ${DDEV_WEBIMAGE}-${DDEV_SITENAME}-built
     command: /pre-start.sh
     {{ if .EnvFile }}
@@ -167,6 +171,8 @@ services:
     {{ end }}
     environment:
     - COLUMNS
+    - COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+    - COREPACK_HOME=/mnt/ddev-global-cache/corepack
     - DOCROOT=${DDEV_DOCROOT}
     - DDEV_COMPOSER_ROOT
     - DDEV_DATABASE
@@ -239,11 +245,13 @@ services:
       {{ end }}
       {{ end }}
     healthcheck:
-      interval: 1s
-      retries: 120
+      interval: "1s"
+      retries: 70
       start_period: "{{ .DefaultContainerTimeout }}s"
-      start_interval: 1s
-      timeout: 70s
+      {{- if templateCanUse "healthcheck.start_interval" }}
+      start_interval: "1s"
+      {{- end }}
+      timeout: "70s"
 
 networks:
   ddev_default:
@@ -251,11 +259,12 @@ networks:
     external: true
   default:
     name: ${COMPOSE_PROJECT_NAME}_default
-    external: true
     {{ if .IsGitpod }}{{/* see https://github.com/ddev/ddev/issues/3766 */}}
     driver_opts:
       com.docker.network.driver.mtu: 1440
     {{ end }}
+    labels:
+      com.ddev.platform: ddev
 
 volumes:
   {{if and (not .OmitDB) (ne .DBType "postgres") }}

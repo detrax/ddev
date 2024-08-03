@@ -2,12 +2,19 @@ package cmd
 
 import (
 	"fmt"
+
 	"github.com/ddev/ddev/pkg/ddevapp"
 	"github.com/ddev/ddev/pkg/globalconfig"
 )
 
 // getRequestedProjects will collect and return the requested projects from command line arguments and flags.
 func getRequestedProjects(names []string, all bool) ([]*ddevapp.DdevApp, error) {
+	return getRequestedProjectsExtended(names, all, false)
+}
+
+// getRequestedProjectsExtended will collect and return the requested projects from command line arguments and flags.
+// If withNonExisting is true, it will return project stubs even if they don't exist.
+func getRequestedProjectsExtended(names []string, all bool, withNonExisting bool) ([]*ddevapp.DdevApp, error) {
 	requestedProjects := make([]*ddevapp.DdevApp, 0)
 
 	// If no project is specified, return the current project
@@ -27,6 +34,13 @@ func getRequestedProjects(names []string, all bool) ([]*ddevapp.DdevApp, error) 
 
 	// If all projects are requested, return here
 	if all {
+		for _, project := range allProjects {
+			err = project.ValidateConfig()
+			if err != nil {
+				return nil, err
+			}
+		}
+
 		return allProjects, nil
 	}
 
@@ -46,6 +60,8 @@ func getRequestedProjects(names []string, all bool) ([]*ddevapp.DdevApp, error) 
 		if requestedProjectsMap[name], exists = allProjectMap[name]; !exists {
 			p := globalconfig.GetProject(name)
 			if p != nil && p.AppRoot != "" {
+				requestedProjectsMap[name] = &ddevapp.DdevApp{Name: name, AppRoot: p.AppRoot}
+			} else if withNonExisting {
 				requestedProjectsMap[name] = &ddevapp.DdevApp{Name: name}
 			} else {
 				return nil, fmt.Errorf("could not find requested project '%s', you may need to use \"ddev start\" to add it to the project catalog", name)
@@ -55,6 +71,11 @@ func getRequestedProjects(names []string, all bool) ([]*ddevapp.DdevApp, error) 
 
 	// Convert map back to slice
 	for _, project := range requestedProjectsMap {
+		err = project.ValidateConfig()
+		if err != nil {
+			return nil, err
+		}
+
 		requestedProjects = append(requestedProjects, project)
 	}
 

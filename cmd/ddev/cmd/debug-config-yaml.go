@@ -1,20 +1,22 @@
 package cmd
 
 import (
+	"reflect"
+	"strings"
+
 	"github.com/ddev/ddev/pkg/ddevapp"
 	"github.com/ddev/ddev/pkg/output"
 	"github.com/ddev/ddev/pkg/util"
 	"github.com/spf13/cobra"
-	"reflect"
-	"strings"
 )
 
 // DebugConfigYamlCmd implements the ddev debug configyaml command
 var DebugConfigYamlCmd = &cobra.Command{
-	Use:     "configyaml [project]",
-	Short:   "Prints the project config.*.yaml usage",
-	Example: "ddev debug configyaml, ddev debug configyaml <projectname>",
-	Run: func(cmd *cobra.Command, args []string) {
+	ValidArgsFunction: ddevapp.GetProjectNamesFunc("all", 1),
+	Use:               "configyaml [project]",
+	Short:             "Prints the project config.*.yaml usage",
+	Example:           "ddev debug configyaml, ddev debug configyaml <projectname>",
+	Run: func(_ *cobra.Command, args []string) {
 		projectName := ""
 
 		if len(args) > 1 {
@@ -29,6 +31,12 @@ var DebugConfigYamlCmd = &cobra.Command{
 		if err != nil {
 			util.Failed("Failed to get active project: %v", err)
 		}
+		// Get fresh version of app so we don't recreate it
+		app, err = ddevapp.NewApp(app.AppRoot, false)
+		if err != nil {
+			util.Failed("NewApp() failed: %v", err)
+		}
+
 		configFiles, err := app.ReadConfig(true)
 		if err != nil {
 			util.Error("failed reading config for project %s: %v", app.Name, err)

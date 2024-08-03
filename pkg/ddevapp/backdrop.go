@@ -13,6 +13,7 @@ import (
 	"github.com/ddev/ddev/pkg/nodeps"
 	"github.com/ddev/ddev/pkg/output"
 	"github.com/ddev/ddev/pkg/util"
+	copy2 "github.com/otiai10/copy"
 )
 
 // BackdropSettings holds database connection details for Backdrop.
@@ -60,7 +61,7 @@ func createBackdropSettingsFile(app *DdevApp) (string, error) {
 
 	if !fileutil.FileExists(app.SiteSettingsPath) {
 		output.UserOut.Printf("No %s file exists, creating one", settings.SiteSettings)
-		if err := writeDrupalSettingsPHP(app.SiteSettingsPath, app.Type); err != nil {
+		if err := writeDrupalSettingsPHP(app); err != nil {
 			return "", err
 		}
 	}
@@ -75,7 +76,7 @@ func createBackdropSettingsFile(app *DdevApp) (string, error) {
 	} else {
 		output.UserOut.Printf("Existing %s file does not include %s, modifying to include ddev settings", settings.SiteSettings, settings.SiteSettingsDdev)
 
-		if err = appendIncludeToDrupalSettingsFile(app.SiteSettingsPath, app.Type); err != nil {
+		if err = appendIncludeToDrupalSettingsFile(app); err != nil {
 			return "", fmt.Errorf("failed to include %s in %s: %v", settings.SiteSettingsDdev, settings.SiteSettings, err)
 		}
 	}
@@ -110,7 +111,7 @@ func writeBackdropSettingsDdevPHP(settings *BackdropSettings, filePath string, _
 
 	// Ensure target directory exists and is writable
 	dir := filepath.Dir(filePath)
-	if err = os.Chmod(dir, 0755); os.IsNotExist(err) {
+	if err = util.Chmod(dir, 0755); os.IsNotExist(err) {
 		if err = os.MkdirAll(dir, 0755); err != nil {
 			return err
 		}
@@ -175,13 +176,13 @@ func backdropImportFilesAction(app *DdevApp, uploadDir, importPath, extPath stri
 	}
 
 	// parent of destination dir should be writable.
-	if err := os.Chmod(filepath.Dir(destPath), 0755); err != nil {
+	if err := util.Chmod(filepath.Dir(destPath), 0755); err != nil {
 		return err
 	}
 
-	// If the destination path exists, remove it as was warned
+	// If the destination path exists, purge it
 	if fileutil.FileExists(destPath) {
-		if err := os.RemoveAll(destPath); err != nil {
+		if err := fileutil.PurgeDirectory(destPath); err != nil {
 			return fmt.Errorf("failed to cleanup %s before import: %v", destPath, err)
 		}
 	}
@@ -202,8 +203,7 @@ func backdropImportFilesAction(app *DdevApp, uploadDir, importPath, extPath stri
 		return nil
 	}
 
-	//nolint: revive
-	if err := fileutil.CopyDir(importPath, destPath); err != nil {
+	if err := copy2.Copy(importPath, destPath); err != nil {
 		return err
 	}
 
@@ -223,4 +223,14 @@ func backdropPostStartAction(app *DdevApp) error {
 		return fmt.Errorf("failed to write settings file %s: %v", app.SiteDdevSettingsFile, err)
 	}
 	return nil
+}
+
+// getBackdropComposerCreateAllowedPaths returns fullpaths that are allowed to be present when running composer create
+func getBackdropComposerCreateAllowedPaths(app *DdevApp) ([]string, error) {
+	var allowed []string
+
+	// drushrc.php path
+	allowed = append(allowed, filepath.Join(filepath.Dir(app.SiteSettingsPath), "drushrc.php"))
+
+	return allowed, nil
 }

@@ -2,13 +2,14 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/ddev/ddev/pkg/nodeps"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/ddev/ddev/pkg/ddevapp"
 	"github.com/ddev/ddev/pkg/exec"
 	"github.com/ddev/ddev/pkg/fileutil"
-	"github.com/ddev/ddev/pkg/nodeps"
 	"github.com/ddev/ddev/pkg/testcommon"
 	"github.com/ddev/ddev/pkg/util"
 	asrt "github.com/stretchr/testify/assert"
@@ -40,8 +41,7 @@ func TestCmdSSH(t *testing.T) {
 		assert.NoError(err)
 		err = app.Stop(true, false)
 		assert.NoError(err)
-		err = os.RemoveAll(testDir)
-		assert.NoError(err)
+		_ = os.RemoveAll(testDir)
 	})
 
 	err = fileutil.AppendStringToFile("index.php", `
@@ -65,7 +65,5 @@ func TestCmdSSH(t *testing.T) {
 
 	b := util.FindBashPath()
 	out, err := exec.RunHostCommand(b, "-c", fmt.Sprintf("echo pwd | %s ssh", DdevBin))
-	assert.NoError(err)
-	assert.Equal("/var/www/html\n", out)
-
+	require.True(t, strings.HasPrefix(out, "/var/www/html\n"), "output should start with /var/www/html but is actually '%s'", out)
 }

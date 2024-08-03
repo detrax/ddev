@@ -2,7 +2,7 @@
 
 Type `ddev` or `ddev -h` in a terminal window to see the available DDEV [commands](../usage/commands.md). There are commands to configure a project, start, stop, describe, etc. Each command also has help using `ddev help <command>` or `ddev command -h`. For example, `ddev help snapshot` will show help and examples for the snapshot command.
 
-* [`ddev config`](../usage/commands.md#config) configures a project’s type and docroot.
+* [`ddev config`](../usage/commands.md#config) configures a project’s type and docroot, either interactively or with flags.
 * [`ddev start`](../usage/commands.md#start) starts up a project.
 * [`ddev launch`](../usage/commands.md#launch) opens a web browser showing the project.
 * [`ddev list`](../usage/commands.md#list) shows current projects and their state.
@@ -23,24 +23,25 @@ Type `ddev` or `ddev -h` in a terminal window to see the available DDEV [command
 * [`ddev composer`](../usage/commands.md#composer) runs Composer inside the container. For example, `ddev composer install` will do a full composer install for you without even needing Composer on your computer. See [developer tools](developer-tools.md#ddev-and-composer).
 * [`ddev snapshot`](../usage/commands.md#snapshot) makes a very fast snapshot of your database that can be easily and quickly restored with [`ddev snapshot restore`](../usage/commands.md#snapshot-restore).
 * [`ddev share`](../usage/commands.md#share) requires ngrok and at least a free account on [ngrok.com](https://ngrok.com) so you can let someone in the next office or on the other side of the planet see your project and what you’re working on. `ddev share -h` gives more info about how to set up ngrok.
-* [`ddev xdebug`](../usage/commands.md#xdebug) enables Xdebug, `ddev xdebug off` disables it, and `ddev xdebug status` shows status.
+* [`ddev xdebug`](../usage/commands.md#xdebug) enables Xdebug, `ddev xdebug off` disables it, and `ddev xdebug status` shows status. You can toggle Xdebug on and off easily using `ddev xdebug toggle`.
 * [`ddev xhprof`](../usage/commands.md#xhprof) enables xhprof, `ddev xhprof off` disables it, and `ddev xhprof status` shows status.
 * `ddev drush` (Drupal and Backdrop only) gives direct access to the `drush` CLI.
 * `ddev artisan` (Laravel only) gives direct access to the Laravel `artisan` CLI.
 * `ddev magento` (Magento2 only) gives access to the `magento` CLI.
 * [`ddev craft`](../usage/commands.md#craft) (Craft CMS only) gives access to the `craft` CLI.
 * [`ddev yarn`](../usage/commands.md#yarn) and [`ddev npm`](../usage/commands.md#npm) give direct access to the `yarn` and `npm` CLIs.
+* `ddev cake` (CakePHP only) gives direct access to the CakePHP `cake` CLI.
 
 ## Node.js, npm, nvm, and Yarn
 
-`nodejs`, `npm`, `nvm` and `yarn` are preinstalled in the web container. You can configure the default value of the installed Node.js version with the [`nodejs_version`](../configuration/config.md#nodejs_version) option in `.ddev/config.yaml` or with `ddev config --nodejs_version`. You can also override that with any value using the built-in `nvm` in the web container or with [`ddev nvm`](../usage/commands.md#nvm), for example `ddev nvm install 6`. There is also a [`ddev yarn`](../usage/commands.md#yarn) command.
+`node`, `nodejs`, `npm`, `nvm` and `yarn` are preinstalled in the web container. You can configure the default value of the installed Node.js version with the [`nodejs_version`](../configuration/config.md#nodejs_version) option in `.ddev/config.yaml` or with `ddev config --nodejs_version`. You can also override that with any value using the built-in `nvm` in the web container or with [`ddev nvm`](../usage/commands.md#nvm), for example `ddev nvm install 6`. There is also a [`ddev yarn`](../usage/commands.md#yarn) command. (Note that since `nodejs_version` configuration can now specify any `node` version, including patch versions, it's preferred to using the less robust `ddev nvm` way of specifying the `node` version.)
 
 ## More Bundled Tools
 
 In addition to the [*commands*](../usage/commands.md) listed above, there are lots of tools included inside the containers:
 
 * [`ddev describe`](../usage/commands.md#describe) tells how to access **Mailpit**, which captures email in your development environment.
-* Composer, Git, Node.js, npm, nvm, and dozens of other tools are installed in the web container, and you can access them via [`ddev ssh`](../usage/commands.md#ssh) or [`ddev exec`](../usage/commands.md#exec).
+* Composer, Git, Node.js, npm, nvm, symfony, and dozens of other tools are installed in the web container, and you can access them via [`ddev ssh`](../usage/commands.md#ssh) or [`ddev exec`](../usage/commands.md#exec).
 * [`ddev logs`](../usage/commands.md#logs) gets you web server logs; `ddev logs -s db` gets database server logs.
 * `sqlite3` and the `mysql` and `psql` clients are inside the web container (and `mysql` or `psql` client is also in the `db` container).
 
@@ -58,8 +59,8 @@ ddev export-db >/tmp/db.sql.gz
 
 To import static file assets for a project, such as uploaded images and documents, use the command [`ddev import-files`](../usage/commands.md#import-files). This command will prompt you to specify the location of your import asset, then import the assets into the project’s upload directory. To define a custom upload directory, set the [`upload_dirs`](../configuration/config.md#upload_dirs) config option. If no custom upload directory is defined, the default will be used:
 
-* For Backdrop projects, this is the `files`.
-* For Drupal projects, these are the `sites/default/files` and `../private` directories.
+* For Backdrop projects, this is `files`.
+* For Drupal projects, this is `sites/default/files`.
 * For Magento 1 projects, this is the `media` directory.
 * For Magento 2 projects, this is the `pub/media` directory.
 * For Shopware projects, this is the `media` directory.
@@ -69,16 +70,27 @@ To import static file assets for a project, such as uploaded images and document
 Other project types need a custom configuration to be able to use this command.
 
 ```bash
-ddev import-files
-Provide the path to the directory or archive you wish to import. Please note, if the destination directory exists, it will be replaced with the import assets specified here.
-Import path:
-~/Downloads/files.tar.gz
-Successfully imported files for drupal8
+$ ddev import-files
+Provide the path to the source directory or archive you wish to import.
+Please note: if the destination directory exists, it will be emptied and replaced with the
+import assets specified here.
+Path to file(s): ~/workspace/d10/.tarballs/files.tgz
+You provided an archive. Do you want to extract from a specific path in your
+archive? You may leave this blank if you wish to use the full archive contents.
+Archive extraction path:
+Successfully imported files for d10
 ```
 
 `ddev import-files` supports the following file types: `.tar`, `.tar.gz`, `.tar.xz`, `.tar.bz2`, `.tgz`, or `.zip`.
 
 It can also import a directory containing static assets.
+
+If using a Tar or ZIP archive, the archive should contain *only the files inside the files directory*. For example in a Drupal site with files at `sites/default/files`, the archive should only contain the contents of the `files` directory; it should not contain a single `files` directory. To do this with the `tar` command, `cd` into the directory and create the archive there. An example Tar file creation is:
+
+```bash
+cd web/sites/default/files
+tar -czf ~/Downloads/files.tgz .
+```
 
 If you want to use `import-files` without answering prompts, use the `--source` or `-s` flag to provide the path to the import asset. If you’re importing an archive, and wish to specify the path within the archive to extract, you can use the `--extract-path` flag in conjunction with the `--source` flag. Example:
 

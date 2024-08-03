@@ -8,7 +8,7 @@ Adding and maintaining project types (like `typo3`, `magento2`, etc.) is not too
 
 To add a new project type:
 
-* Add the new type to the list in `nodeps.go`
+* Add the new type to the list in `nodeps/values.go`
 * Add to `appTypeMatrix` in `apptypes.go`
 * Create a new go file for your project type, like `django.go`.
 * Implement the functions that you think are needed for your project type and add references to them in your `appTypeMatrix` stanza. There are lots of examples that you can start with in places like `drupal.go` and `typo3.go`, `shopware6.go`, etc. The comments in the code in `apptypes.go` for the `appTypeFuncs` for each type of action tell what these are for, but here's a quick summary.
@@ -18,11 +18,12 @@ To add a new project type:
     * `apptypeSettingsPaths` returns the paths for the main settings file and the extra settings file that DDEV may create (like settings.ddev.php for Drupal).
     * `appTypeDetect` is a function that determines whether the project is of the type you’re implementing.
     * `postImportDBAction` can do something after db import. I don’t see it implemented anywhere.
-    * `configOverrideAction` can change default config for your project type. For example, magento2 now requires `php8.1`, so a `configOverrideAction` can change the php version.
+    * `configOverrideAction` can change default config for your project type. For example, your CMS may require `php8.3`, so a `configOverrideAction` can change the php version.
     * `postConfigAction` gives a chance to do something at the end of config, but it doesn’t seem to be used anywhere.
     * `postStartAction` adds actions at the end of [`ddev start`](../users/usage/commands.md#start). You'll see several implementations of this, for things like creating needed default directories, or setting permissions on files, etc.
     * `importFilesAction` defines how [`ddev import-files`](../users/usage/commands.md#import-files) works for this project type.
     * `defaultWorkingDirMap` allows the project type to override the project’s [`working_dir`](../users/configuration/config.md#working_dir) (where [`ddev ssh`](../users/usage/commands.md#ssh) and [`ddev exec`](../users/usage/commands.md#exec) start by default). This is mostly not done anymore, as the `working_dir` is typically the project root.
+    * `composerCreateAllowedPaths` specifies the paths that can exist in a directory when `ddev composer create` is being used.
 * You’ll likely need templates for settings files, use the Drupal or TYPO3 templates as examples, for example `pkg/ddevapp/drupal` and `pkg/ddevapp/typo3`. Those templates have to be loaded at runtime as well.
 * Once your project type starts working and behaving as you’d like, you’ll need to add test artifacts for it and try testing it (locally first).
     * Add your project to `TestSites` in `ddevapp_test.go`.

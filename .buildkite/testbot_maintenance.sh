@@ -4,7 +4,7 @@ set -eu -o pipefail
 
 os=$(go env GOOS)
 
-rm -rf ~/.ddev/Test* ~/.ddev/global_config.yaml ~/.ddev/homeadditions ~/.ddev/commands ~/.ddev/bin/docker-comnpose* ~/tmp/ddevtest
+rm -rf ~/.ddev/Test* ~/.ddev/global_config.yaml ~/.ddev/project_list.yaml ~/.ddev/homeadditions ~/.ddev/commands ~/.ddev/bin/docker-compose* ~/tmp/ddevtest
 
 # Latest git won't let you do much in a non-safe directory
 git config --global --add safe.directory '*' || true
@@ -27,27 +27,31 @@ fi
 # Upgrade various items on various operating systems
 case $os in
 darwin)
-    for item in ddev/ddev-edge/ddev golang golangci-lint libpq mkcert mkdocs; do
-        brew upgrade $item || brew install $item || true
+    brew pin buildkite-agent
+    brew upgrade
+    for item in ddev/ddev/ddev golang golangci-lint libpq mkcert mkdocs; do
+        brew install $item || true
     done
     brew link --force libpq
     ;;
 windows)
     (yes | choco upgrade -y golang nodejs markdownlint-cli mkcert mkdocs postgresql) || true
     ;;
-# linux is currently WSL2
+# linux is currently WSL2 only
 linux)
     # homebrew is only on amd64
     if [ "$(arch)" = "x86_64" ]; then
-      for item in ddev/ddev-edge/ddev golang mkcert mkdocs postgresql-client; do
+      for item in libpq mkdocs; do
         brew upgrade $item || brew install $item || true
       done
+      brew link --force libpq
     fi
     ;;
 
 esac
 
-(yes | ddev delete images >/dev/null) || true
+echo "Deleting unused images with ddev delete images"
+ddev delete images -y || true
 
 # Remove any -built images, as we want to make sure tests do the building.
 docker rmi -f $(docker images --filter "dangling=true" -q --no-trunc) >/dev/null 2>&1 || true
@@ -61,5 +65,5 @@ fi
 # Clean the docker build cache
 docker buildx prune -f -a || true
 # Remove any images with name '-built'
-docker rm -f $(docker ps -aq) >/dev/null || true
-docker rmi -f $(docker images | awk '/[-]built/ { print $3 }')  >/dev/null || true
+docker rm -f $(docker ps -aq) >/dev/null 2>&1 || true
+docker rmi -f $(docker images | awk '/[-]built/ { print $3 }')  >/dev/null 2>&1 || true

@@ -75,7 +75,7 @@ bats tests/ddev-webserver/general.bats
 
 cleanup
 
-for PHP_VERSION in 5.6 7.0 7.1 7.2 7.3 7.4 8.0 8.1 8.2 8.3; do
+for PHP_VERSION in 5.6 7.0 7.1 7.2 7.3 7.4 8.0 8.1 8.2 8.3 8.4; do
     for WEBSERVER_TYPE in nginx-fpm apache-fpm; do
         export PHP_VERSION WEBSERVER_TYPE DOCKER_IMAGE
         docker run -u "$MOUNTUID:$MOUNTGID" -p $HOST_HTTP_PORT:$CONTAINER_HTTP_PORT -p $HOST_HTTPS_PORT:$CONTAINER_HTTPS_PORT -e "DDEV_PHP_VERSION=${PHP_VERSION}" -e "DDEV_WEBSERVER_TYPE=${WEBSERVER_TYPE}" -d --name $CONTAINER_NAME -v ddev-global-cache:/mnt/ddev-global-cache -d $DOCKER_IMAGE >/dev/null
@@ -90,7 +90,7 @@ for PHP_VERSION in 5.6 7.0 7.1 7.2 7.3 7.4 8.0 8.1 8.2 8.3; do
     done
 done
 
-for project_type in backdrop craftcms drupal6 drupal7 drupal8 drupal9 drupal10 laravel magento magento2 typo3 wordpress default; do
+for project_type in backdrop craftcms drupal drupal6 drupal7 drupal8 drupal9 drupal10 laravel magento magento2 typo3 wordpress default; do
 	export PHP_VERSION="8.0"
     export project_type
 	if [ "$project_type" == "drupal6" ]; then

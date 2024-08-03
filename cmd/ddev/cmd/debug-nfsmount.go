@@ -22,7 +22,7 @@ var DebugNFSMountCmd = &cobra.Command{
 	Use:     "nfsmount",
 	Short:   "Checks to see if nfs mounting works for current project",
 	Example: "ddev debug nfsmount",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, args []string) {
 		testVolume := "testnfsmount"
 		containerName := "testnfscontainer"
 
@@ -62,7 +62,7 @@ var DebugNFSMountCmd = &cobra.Command{
 		_ = volume
 		uidStr, _, _ := util.GetContainerUIDGid()
 
-		_, out, err := dockerutil.RunSimpleContainer(docker.GetWebImage(), containerName, []string{"sh", "-c", "findmnt -T /nfsmount && ls -d /nfsmount/.ddev"}, []string{}, []string{}, []string{"testnfsmount" + ":/nfsmount"}, uidStr, true, false, map[string]string{"com.ddev.site-name": ""}, nil)
+		_, out, err := dockerutil.RunSimpleContainer(docker.GetWebImage(), containerName, []string{"sh", "-c", "findmnt -T /nfsmount && ls -d /nfsmount/.ddev"}, []string{}, []string{}, []string{"testnfsmount" + ":/nfsmount"}, uidStr, true, false, map[string]string{"com.ddev.site-name": ""}, nil, nil)
 		if err != nil {
 			util.Warning("NFS does not seem to be set up yet, see debugging instructions at https://ddev.readthedocs.io/en/stable/users/install/performance/#nfs")
 			util.Failed("Details: error=%v\noutput=%v", err, out)

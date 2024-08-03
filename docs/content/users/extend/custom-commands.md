@@ -1,3 +1,7 @@
+---
+search:
+  boost: 2
+---
 # Custom Commands
 
 Custom commands can easily be added to DDEV, to be executed on the host or in containers.
@@ -36,11 +40,11 @@ open -a PhpStorm.app ${DDEV_APPROOT}
 
 To provide a command which will execute in a container, add a Bash script to `.ddev/commands/<container_name>`, for example, `.ddev/commands/web/mycommand`. The Bash script will be executed inside the named container. For example, see the [several standard DDEV script-based web container commands](https://github.com/ddev/ddev/blob/master/pkg/ddevapp/global_dotddev_assets/commands/web).
 
-You can run commands in custom containers as well as standard DDEV `web` and `db` containers. Use the service name, like `.ddev/commands/solr/<command>`. The only catch with a custom container is that your service must mount `/mnt/ddev_config` like the `web` and `db` containers do; the `volumes` section of `docker-compose.<servicename>.yaml` needs:
+You can run commands in custom containers as well as standard DDEV `web` and `db` containers. Use the service name, like `.ddev/commands/solr/<command>`. The only catch with a custom container is that your service must mount `/mnt/ddev-global-cache` like the `web` and `db` containers do; the `volumes` section of `docker-compose.<servicename>.yaml` needs:
 
 ```
     volumes:
-    - ".:/mnt/ddev_config"
+      - ddev-global-cache:/mnt/ddev-global-cache
 ```
 
 For example, to add a `solrtail` command that runs in a Solr service, add `.ddev/commands/solr/solrtail` with:
@@ -59,9 +63,29 @@ tail -f /opt/solr/server/logs/solr.log
 
 Global commands work exactly the same as project-level commands, but they need to go in your *global* `.ddev` directory. Your home directory has a `.ddev/commands` in it, where you can add host, web, or db commands.
 
+Changes to the command files in the global `.ddev` directory need a `ddev start` for changes to be picked up by a project, as the global commands are copied to the project on start.
+
 ## Shell Command Examples
 
 There are many examples of [global](https://github.com/ddev/ddev/tree/master/pkg/ddevapp/global_dotddev_assets/commands) and [project-level](https://github.com/ddev/ddev/tree/master/pkg/ddevapp/dotddev_assets/commands) custom/shell commands that ship with DDEV you can adapt for your own use. They can be found in your `~/.ddev/commands/*` directories and in your project’s `.ddev/commands/*` directories. There you’ll see how to provide usage, examples, and how to use arguments provided to the commands. For example, the [`xdebug` command](https://github.com/ddev/ddev/blob/master/pkg/ddevapp/global_dotddev_assets/commands/web/xdebug) shows simple argument processing and the [launch command](https://github.com/ddev/ddev/blob/master/pkg/ddevapp/global_dotddev_assets/commands/host/launch) demonstrates flag processing.
+
+## Command Line Completion
+
+If your custom command has a set of pre-determined valid arguments it can accept, you can use the [`AutocompleteTerms`](#autocompleteterms-annotation).
+
+For dynamic completion, you can create a separate script with the same name in a directory named `autocomplete`.
+For example, if your command is in `~/.ddev/commands/web/my-command`, your autocompletion script will be in `~/.ddev/commands/web/autocomplete/my-command`.
+
+When you press tab on the command line after your command, the associated autocomplete script will be executed. The current command line (starting with the name of your command) will be passed into the completion script as arguments. If there is a space at the end of the command line, an empty argument will be included.
+
+For example:
+
+* `ddev my-command <tab>` will pass `my-command` and an empty argument into the autocomplete script.
+* `ddev my-command som<tab>` will pass `my-command`, and `som` into the autocomplete script.
+
+The autocomplete script should echo the valid arguments as a string separated by line breaks. You don't need to filter the arguments by the last argument string (e.g. if the last argument is `som`, you don't need to filter out any arguments that don't start with `som`). That will be handled for you before the result is given to your shell as completion suggestions.
+
+The web container's [`nvm` autocomplete script](https://github.com/ddev/ddev/blob/master/pkg/ddevapp/global_dotddev_assets/commands/web/autocomplete/nvm) shows how this can be used to forward completion requests to a relevant script in the container.
 
 ## Environment Variables Provided
 
@@ -83,7 +107,8 @@ A number of environment variables are provided to these command scripts. These a
 * `DDEV_PHP_VERSION`: Current PHP version
 * `DDEV_PRIMARY_URL`: Primary project URL
 * `DDEV_PROJECT`: Project name, like `d8composer`
-* `DDEV_PROJECT_TYPE`: `drupal8`, `typo3`, `backdrop`, `wordpress`, etc.
+* `DDEV_PROJECT_STATUS`: Project status determined from the `web` and `db` services health, like `starting`, `running`, `stopped`, `paused`, or another status returned from Docker, including `healthy`, `unhealthy`, `exited`, `restarting`
+* `DDEV_PROJECT_TYPE`: `backdrop`, `drupal`, `typo3`,`wordpress`, etc.
 * `DDEV_ROUTER_HTTP_PORT`: Router port for HTTP
 * `DDEV_ROUTER_HTTPS_PORT`: Router port for HTTPS
 * `DDEV_SITENAME`: Project name, like `d8composer`
@@ -103,7 +128,7 @@ Useful variables for container scripts are:
 * `DDEV_PHP_VERSION`: Current PHP version
 * `DDEV_PRIMARY_URL`: Primary URL for the project
 * `DDEV_PROJECT`: Project name, like `d8composer`
-* `DDEV_PROJECT_TYPE`: `drupal8`, `typo3`, `backdrop`, `wordpress`, etc.
+* `DDEV_PROJECT_TYPE`: `backdrop`, `drupal`, `typo3`,`wordpress`, etc.
 * `DDEV_ROUTER_HTTP_PORT`: Router port for HTTP
 * `DDEV_ROUTER_HTTPS_PORT`: Router port for HTTPS
 * `DDEV_SITENAME`: Project name, like `d8composer`
@@ -115,7 +140,7 @@ Useful variables for container scripts are:
 
 Custom commands support various annotations in the header for providing additional information to the user.
 
-### “Description” Annotation
+### `Description` Annotation
 
 `Description` should briefly describe the command in its help message.
 
@@ -123,7 +148,7 @@ Usage: `## Description: <command-description>`
 
 Example: `## Description: my great custom command`
 
-### “Usage” Annotation
+### `Usage` Annotation
 
 `Usage` should explain how to use the command in its help message.
 
@@ -131,7 +156,7 @@ Usage: `## Usage: <command-usage>`
 
 Example: `## Usage: commandname [flags] [args]`
 
-### “Example” Annotation
+### `Example` Annotation
 
 `Example` should demonstrate how the command might be used. Use `\n` to force a line break.
 
@@ -139,7 +164,7 @@ Usage: `## Example: <command-example>`
 
 Example: `## Example: commandname\ncommandname -h`
 
-### “Flags” Annotation
+### `Flags` Annotation
 
 `Flags` should explain any available flags, including their shorthand when relevant, for the help message. It has to be encoded according the following definition:
 
@@ -184,15 +209,38 @@ The following fields can be used for a flag definition:
 * `NoOptDefVal`: default value, if the flag is on the command line without any options
 * `Annotations`: used by cobra.Command Bash autocomplete code (see <https://github.com/spf13/cobra/blob/main/site/content/completions/bash.md>)
 
-### “ProjectTypes” Annotation
+### `AutocompleteTerms` Annotation
+
+If your command accepts specific arguments, and you know ahead of time what those arguments are, you can use this annotation to provide those arguments for autocompletion.
+
+Usage: `## AutocompleteTerms: [<list-of-valid-arguments>]`
+
+Example: `## AutocompleteTerms: ["enable","disable","toggle","status"]`
+
+### `CanRunGlobally` Annotation
+
+This annotation is only available for global host commands.
+
+Use `CanRunGlobally: true` if your global host command can be safely run even if the current working directory isn't inside a DDEV project.
+
+This will make your command available to run regardless of what your current working directory is when you run it.
+
+This annotation will have no effect if you are also using one of the following annotations:
+
+* `ProjectTypes`
+* `DBTypes`
+
+Example: `## CanRunGlobally: true`
+
+### `ProjectTypes` Annotation
 
 If your command should only be visible for a specific project type, `ProjectTypes` will allow you to define the supported types. This is especially useful for global custom commands. See [Quickstart for many CMSes](../../users/quickstart.md) for more information about the supported project types. Multiple types are separated by a comma.
 
 Usage: `## ProjectTypes: <list-of-project-types>`
 
-Example: `## ProjectTypes: drupal7,drupal8,drupal9,backdrop`
+Example: `## ProjectTypes: drupal7,drupal,backdrop`
 
-### “OSTypes” Annotation (Host Commands Only)
+### `OSTypes` Annotation (Host Commands Only)
 
 If your host command should only run on one or more operating systems, add the `OSTypes` annotation. Multiple types are separated by a comma. Valid types are:
 
@@ -204,7 +252,7 @@ Usage: `## OSTypes: <list-of-os-types>`
 
 Example: `## OSTypes: darwin,linux`
 
-### “HostBinaryExists” Annotation (Host Commands Only)
+### `HostBinaryExists` Annotation (Host Commands Only)
 
 If your host command should only run if a particular file exists, add the `HostBinaryExists` annotation.
 
@@ -212,7 +260,7 @@ Usage: `## HostBinaryExists: <path/to/file>`
 
 Example: `## HostBinaryExists: /Applications/Sequel ace.app`
 
-### “DBTypes” Annotation
+### `DBTypes` Annotation
 
 If your command should only be available for a particular database type, add the `DBTypes` annotation. Multiple types are separated by a comma. Valid types the available database types.
 
@@ -220,13 +268,13 @@ Usage: `## DBTypes: <type>`
 
 Example: `## DBTypes: postgres`
 
-### “HostWorkingDir” Annotation (Container Commands Only)
+### `HostWorkingDir` Annotation (Container Commands Only)
 
 If your container command should run from the directory you are running the command in the host, add the `HostWorkingDir` annotation.
 
 Example: `## HostWorkingDir: true`
 
-### "ExecRaw" Annotation (Container Commands Only)
+### `ExecRaw` Annotation (Container Commands Only)
 
 Use `ExecRaw: true` to pass command arguments directly to the container as-is.
 

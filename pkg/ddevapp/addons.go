@@ -4,7 +4,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/Masterminds/sprig/v3"
+	"os"
+	"path/filepath"
+	"strings"
+	"text/template"
+
 	"github.com/ddev/ddev/pkg/exec"
 	"github.com/ddev/ddev/pkg/fileutil"
 	github2 "github.com/ddev/ddev/pkg/github"
@@ -13,10 +17,6 @@ import (
 	"github.com/ddev/ddev/pkg/util"
 	"github.com/google/go-github/v52/github"
 	"gopkg.in/yaml.v3"
-	"os"
-	"path/filepath"
-	"strings"
-	"text/template"
 )
 
 const AddonMetadataDir = "addon-metadata"
@@ -24,14 +24,15 @@ const AddonMetadataDir = "addon-metadata"
 // Format of install.yaml
 type InstallDesc struct {
 	// Name must be unique in a project; it will overwrite any existing add-on with the same name.
-	Name               string            `yaml:"name"`
-	ProjectFiles       []string          `yaml:"project_files"`
-	GlobalFiles        []string          `yaml:"global_files,omitempty"`
-	Dependencies       []string          `yaml:"dependencies,omitempty"`
-	PreInstallActions  []string          `yaml:"pre_install_actions,omitempty"`
-	PostInstallActions []string          `yaml:"post_install_actions,omitempty"`
-	RemovalActions     []string          `yaml:"removal_actions,omitempty"`
-	YamlReadFiles      map[string]string `yaml:"yaml_read_files"`
+	Name                  string            `yaml:"name"`
+	ProjectFiles          []string          `yaml:"project_files"`
+	GlobalFiles           []string          `yaml:"global_files,omitempty"`
+	DdevVersionConstraint string            `yaml:"ddev_version_constraint,omitempty"`
+	Dependencies          []string          `yaml:"dependencies,omitempty"`
+	PreInstallActions     []string          `yaml:"pre_install_actions,omitempty"`
+	PostInstallActions    []string          `yaml:"post_install_actions,omitempty"`
+	RemovalActions        []string          `yaml:"removal_actions,omitempty"`
+	YamlReadFiles         map[string]string `yaml:"yaml_read_files"`
 }
 
 // format of the add-on manifest file
@@ -94,10 +95,26 @@ func GetInstalledAddonNames(app *DdevApp) []string {
 	return names
 }
 
+// GetInstalledAddonProjectFiles returns a list of project files installed by add-ons
+func GetInstalledAddonProjectFiles(app *DdevApp) []string {
+	manifests := GetInstalledAddons(app)
+	uniqueFilesMap := make(map[string]struct{})
+	for _, manifest := range manifests {
+		for _, file := range manifest.ProjectFiles {
+			uniqueFilesMap[filepath.Join(app.AppConfDir(), file)] = struct{}{}
+		}
+	}
+	uniqueFiles := make([]string, 0, len(uniqueFilesMap))
+	for file := range uniqueFilesMap {
+		uniqueFiles = append(uniqueFiles, file)
+	}
+	return uniqueFiles
+}
+
 // ProcessAddonAction takes a stanza from yaml exec section and executes it.
 func ProcessAddonAction(action string, dict map[string]interface{}, bashPath string, verbose bool) error {
 	action = "set -eu -o pipefail\n" + action
-	t, err := template.New("ProcessAddonAction").Funcs(sprig.TxtFuncMap()).Parse(action)
+	t, err := template.New("ProcessAddonAction").Funcs(getTemplateFuncMap()).Parse(action)
 	if err != nil {
 		return fmt.Errorf("could not parse action '%s': %v", action, err)
 	}

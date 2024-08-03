@@ -10,21 +10,72 @@ It’s common to have a requirement for the `web` or `db` images which isn’t b
 You can add extra Debian packages with lines like this in `.ddev/config.yaml`:
 
 ```yaml
-webimage_extra_packages: [php-yaml, php8.2-tidy]
-dbimage_extra_packages: [telnet, netcat]
+webimage_extra_packages: ["php${DDEV_PHP_VERSION}-yaml", "php${DDEV_PHP_VERSION}-tidy"]
+dbimage_extra_packages: [telnet, netcat, sudo]
 ```
 
 Then the additional packages will be built into the containers during [`ddev start`](../usage/commands.md#start).
 
-## Determining What Packages You Need
+## Adding PHP Extensions
 
-The `web` container is a Debian image, and its PHP distributions are packaged (thank you!) by [`deb.sury.org`](https://deb.sury.org/).
+### PHP Extensions supported by `deb.sury.org`
 
-Most PHP extensions are built within the `deb.sury.org` distribution. You can Google the extension you want, or download and search the [Packages](https://packages.sury.org/php/dists/buster/main/binary-amd64/Packages) list from the `sury` distribution. For example, the `bcmath` PHP extension is provided by `php-bcmath`. Many packages have version-specific names, like `php7.3-tidy`.
+If a PHP extension is supported by the upstream package management from `deb.sury.org`, you'll be able to add it with minimal effort. Test to see if it's available using `ddev exec '(sudo apt-get update || true) && sudo apt-get install php${DDEV_PHP_VERSION}-<extension>'`, for example, `ddev exec '(sudo apt-get update || true) && sudo apt-get install php${DDEV_PHP_VERSION}-imap'`. If that works, then the extension is supported, and you can add `webimage_extra_packages: ["php${DDEV_PHP_VERSION}-<extension>"]` to your `.ddev/config.yaml` file.
 
-If you need a package that is *not* a PHP package, you can view and search standard Debian packages at [packages.debian.org/stable](https://packages.debian.org/stable/), or use Google.
+### PECL PHP Extensions not supported by `deb.sury.org`
 
-To test that a package will do what you want, you can [`ddev ssh`](../usage/commands.md#ssh) and `sudo apt-get update && sudo apt-get install <package>` to verify that you can install it and you get what you need. A PHP extension may require `killall -USR2 php-fpm` to take effect. After you’ve tried that, you can add the package to [`webimage_extra_packages`](../configuration/config.md#webimage_extra_packages).
+!!!tip "Few people need pecl extensions"
+    Most people don't need to install PHP extensions that aren't supported by `deb.sury.org`, so you only need to go down this path if you have very particular needs.
+
+If a PHP extension is not supported by the upstream package management from `deb.sury.org`, you'll install it via pecl using a `.ddev/web-build/Dockerfile`. You can search for the extension on [pecl.php.net](https://pecl.php.net/) to find the package name. (This technique can also be used to get newer versions of PHP extensions than are available in the `deb.sury.org` distribution.)
+
+For example, a `.ddev/web-build/Dockerfile.mcrypt` might look like this:
+
+```dockerfile
+ENV extension=mcrypt
+SHELL ["/bin/bash", "-c"]
+# Install the needed development packages
+RUN (apt-get update || true) && DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::="--force-confnew" --no-install-recommends --no-install-suggests build-essential php-pear php${DDEV_PHP_VERSION}-dev
+# mcrypt happens to require libmcrypt-dev
+RUN apt-get install -y libmcrypt-dev
+RUN pecl install ${extension}
+RUN echo "extension=${extension}.so" > /etc/php/${DDEV_PHP_VERSION}/mods-available/${extension}.ini && chmod 666 /etc/php/${DDEV_PHP_VERSION}/mods-available/${extension}.ini
+RUN phpenmod ${extension}
+```
+
+A `.ddev/web-build/Dockerfile.xlswriter` to add `xlswriter` might be:
+
+```dockerfile
+ENV extension=xlswriter
+SHELL ["/bin/bash", "-c"]
+# Install the needed development packages
+RUN (apt-get update || true) && DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::="--force-confnew" --no-install-recommends --no-install-suggests build-essential php-pear php${DDEV_PHP_VERSION}-dev
+# xlswriter requires libz-dev
+RUN sudo apt-get install -y libz-dev
+RUN echo | pecl install ${extension}
+RUN echo "extension=${extension}.so" > /etc/php/${DDEV_PHP_VERSION}/mods-available/${extension}.ini && chmod 666 /etc/php/${DDEV_PHP_VERSION}/mods-available/${extension}.ini
+RUN phpenmod ${extension}
+
+```
+
+A `.ddev/web-build/Dockerfile.xdebug` (overriding the `deb.sury.org` version) might look like this:
+
+```dockerfile
+# This example installs xdebug from pecl instead of the standard deb.sury.org package
+ENV extension=xdebug
+SHELL ["/bin/bash", "-c"]
+RUN phpdismod xdebug
+# Install the needed development packages
+RUN (apt-get update || true) && DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::="--force-confnew" --no-install-recommends --no-install-suggests build-essential php-pear php${DDEV_PHP_VERSION}-dev
+# Remove the standard xdebug provided by deb.sury.org
+RUN apt-get remove php${DDEV_PHP_VERSION}-xdebug || true
+RUN pecl install ${extension}
+# Use the standard xdebug.ini from source
+ADD https://raw.githubusercontent.com/ddev/ddev/master/containers/ddev-php-base/ddev-php-files/etc/php/8.2/mods-available/xdebug.ini /etc/php/${DDEV_PHP_VERSION}/mods-available
+RUN chmod 666 /etc/php/${DDEV_PHP_VERSION}/mods-available/xdebug.ini
+# ddev xdebug handles enabling module so we don't enable here
+#RUN phpenmod ${extension}
+```
 
 ## Adding Extra Dockerfiles for `webimage` and `dbimage`
 
@@ -84,21 +135,23 @@ ENV COMPOSER_HOME=""
 
 The following environment variables are available for the web Dockerfile to use at build time:
 
-* `$BASE_IMAGE`: the base image, like `ddev/ddev-webserver:v1.21.4`
+* `$BASE_IMAGE`: the base image, like `ddev/ddev-webserver:v1.23.3`
 * `$username`: the username inferred from your host-side username
 * `$uid`: the user ID inferred from your host-side user ID
 * `$gid`: the group ID inferred from your host-side group ID
-* `$DDEV_PHP_VERSION`: the PHP version declared in your project configuration (provided in versions after v1.21.4)
+* `$DDEV_PHP_VERSION`: the PHP version declared in your project configuration
+* `$TARGETARCH`: The build target architecture, like `arm64` or `amd64`
+* `$TARGETOS`: The build target operating system (always `linux`)
+* `$TARGETPLATFORM`: `linux/amd64` or `linux/arm64` depending on the machine it's been executed on
 
-For example, a Dockerfile might want to build an extension for the configured PHP version like this:
+For example, a Dockerfile might want to build an extension for the configured PHP version like this using `$DDEV_PHP_VERSION` to specify the proper version:
 
-```Dockerfile
+```dockerfile
 ENV extension=xhprof
 ENV extension_repo=https://github.com/longxinH/xhprof
 ENV extension_version=v2.3.8
-# For versions <= DDEV v1.21.4 you must also declare DDEV_PHP_VERSION yourself: ENV DDEV_PHP_VERSION=8.1
 
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::="--force-confnew" --no-install-recommends --no-install-suggests autoconf build-essential libc-dev php-pear php${DDEV_PHP_VERSION}-dev pkg-config zlib1g-dev
+RUN (apt-get update || true) && DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::="--force-confnew" --no-install-recommends --no-install-suggests autoconf build-essential libc-dev php-pear php${DDEV_PHP_VERSION}-dev pkg-config zlib1g-dev
 RUN mkdir -p /tmp/php-${extension} && cd /tmp/php-${extension} && git clone ${extension_repo} .
 WORKDIR /tmp/php-${extension}/extension
 RUN git checkout ${extension_version}
@@ -106,6 +159,12 @@ RUN phpize
 RUN ./configure
 RUN make install
 RUN echo "extension=${extension}.so" > /etc/php/${DDEV_PHP_VERSION}/mods-available/${extension}.ini
+```
+
+An example of using `$TARGETARCH` would be:
+
+```dockerfile
+RUN curl --fail -JL -s -o /usr/local/bin/mkcert "https://dl.filippo.io/mkcert/latest?for=linux/${TARGETARCH}"
 ```
 
 ## Installing into the home directory

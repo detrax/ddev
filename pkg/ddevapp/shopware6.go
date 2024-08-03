@@ -1,26 +1,29 @@
 package ddevapp
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/ddev/ddev/pkg/archive"
 	"github.com/ddev/ddev/pkg/fileutil"
+	"github.com/ddev/ddev/pkg/util"
+	copy2 "github.com/otiai10/copy"
 )
 
 // isShopware6App returns true if the app is of type shopware6
 func isShopware6App(app *DdevApp) bool {
-	isShopware6, err := fileutil.FgrepStringInFile(filepath.Join(app.AppRoot, "config", "README.md"), "packages/shopware.yaml")
+	isShopware6, err := fileutil.FgrepStringInFile(filepath.Join(app.AppRoot, "composer.json"), `"name": "shopware/production"`)
 	if err == nil && isShopware6 {
 		return true
 	}
 	return false
 }
 
-// setShopware6SiteSettingsPaths sets the paths to .env file.
+// setShopware6SiteSettingsPaths sets the paths to .env.local file.
 func setShopware6SiteSettingsPaths(app *DdevApp) {
-	app.SiteSettingsPath = filepath.Join(app.AppRoot, ".env")
+	app.SiteSettingsPath = filepath.Join(app.AppRoot, ".env.local")
 }
 
 // shopware6ImportFilesAction defines the shopware6 workflow for importing user-generated files.
@@ -33,13 +36,13 @@ func shopware6ImportFilesAction(app *DdevApp, uploadDir, importPath, extPath str
 	}
 
 	// parent of destination dir should be writable.
-	if err := os.Chmod(filepath.Dir(destPath), 0755); err != nil {
+	if err := util.Chmod(filepath.Dir(destPath), 0755); err != nil {
 		return err
 	}
 
-	// If the destination path exists, remove it as was warned
+	// If the destination path exists, purge it as was warned
 	if fileutil.FileExists(destPath) {
-		if err := os.RemoveAll(destPath); err != nil {
+		if err := fileutil.PurgeDirectory(destPath); err != nil {
 			return fmt.Errorf("failed to cleanup %s before import: %v", destPath, err)
 		}
 	}
@@ -60,8 +63,7 @@ func shopware6ImportFilesAction(app *DdevApp, uploadDir, importPath, extPath str
 		return nil
 	}
 
-	//nolint: revive
-	if err := fileutil.CopyDir(importPath, destPath); err != nil {
+	if err := copy2.Copy(importPath, destPath); err != nil {
 		return err
 	}
 
@@ -73,25 +75,31 @@ func getShopwareUploadDirs(_ *DdevApp) []string {
 	return []string{"media"}
 }
 
-// shopware6PostStartAction checks to see if the .env file is set up
+// shopware6PostStartAction checks to see if the .env.local file is set up
 func shopware6PostStartAction(app *DdevApp) error {
 	if app.DisableSettingsManagement {
 		return nil
 	}
-	envFilePath := filepath.Join(app.AppRoot, ".env")
+	envFilePath := filepath.Join(app.AppRoot, ".env.local")
 	_, envText, err := ReadProjectEnvFile(envFilePath)
 	var envMap = map[string]string{
 		"DATABASE_URL": `mysql://db:db@db:3306/db`,
+		"APP_ENV":      "dev",
 		"APP_URL":      app.GetPrimaryURL(),
-		"MAILER_URL":   `smtp://127.0.0.1:1025?encryption=&auth_mode=`,
+		"MAILER_DSN":   `smtp://127.0.0.1:1025?encryption=&auth_mode=`,
 	}
-	// Shopware 6 refuses to do bin/console system:setup if the env file exists,
-	// so if it doesn't exist, wait for it to be created
-	if err == nil {
+	// If the .env.local doesn't exist, create it.
+	switch {
+	case err == nil:
+		util.Warning("Updating %s with %v", envFilePath, envMap)
+		fallthrough
+	case errors.Is(err, os.ErrNotExist):
 		err := WriteProjectEnvFile(envFilePath, envMap, envText)
 		if err != nil {
 			return err
 		}
+	default:
+		util.Warning("error opening %s: %v", envFilePath, err)
 	}
 
 	return nil

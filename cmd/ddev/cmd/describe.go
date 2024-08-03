@@ -3,6 +3,9 @@ package cmd
 import (
 	"bytes"
 	"fmt"
+	"sort"
+	"strings"
+
 	"github.com/ddev/ddev/pkg/ddevapp"
 	"github.com/ddev/ddev/pkg/globalconfig"
 	"github.com/ddev/ddev/pkg/nodeps"
@@ -10,8 +13,6 @@ import (
 	"github.com/ddev/ddev/pkg/styles"
 	"github.com/ddev/ddev/pkg/util"
 	"github.com/ddev/ddev/pkg/version"
-	"sort"
-	"strings"
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/jedib0t/go-pretty/v6/text"
@@ -20,9 +21,10 @@ import (
 
 // DescribeCommand represents the `ddev config` command
 var DescribeCommand = &cobra.Command{
-	Use:     "describe [projectname]",
-	Aliases: []string{"status", "st", "desc"},
-	Short:   "Get a detailed description of a running DDEV project.",
+	ValidArgsFunction: ddevapp.GetProjectNamesFunc("all", 1),
+	Use:               "describe [projectname]",
+	Aliases:           []string{"status", "st", "desc"},
+	Short:             "Get a detailed description of a running DDEV project.",
 	Long: `Get a detailed description of a running DDEV project. Describe provides basic
 information about a DDEV project, including its name, location, url, and status.
 It also provides details for MySQL connections, and connection information for
@@ -30,7 +32,7 @@ additional services like Mailpit. You can run 'ddev describe' from
 a project directory to describe that project, or you can specify a project to describe by
 running 'ddev describe <projectname>'.`,
 	Example: "ddev describe\nddev describe <projectname>\nddev status\nddev st",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, args []string) {
 		if len(args) > 1 {
 			util.Failed("Too many arguments provided. Please use 'ddev describe' or 'ddev describe [projectname]'")
 		}
@@ -59,6 +61,7 @@ running 'ddev describe <projectname>'.`,
 // renderAppDescribe takes the map describing the app and renders it for plain-text output
 func renderAppDescribe(app *ddevapp.DdevApp, desc map[string]interface{}) (string, error) {
 	status := desc["status"]
+
 	var out bytes.Buffer
 
 	t := table.NewWriter()
@@ -121,9 +124,9 @@ func renderAppDescribe(app *ddevapp.DdevApp, desc map[string]interface{}) (strin
 
 		for _, k := range serviceNames {
 			v := serviceMap[k]
-
 			httpURL := ""
 			urlPortParts := []string{}
+			extraInfo := []string{}
 
 			switch {
 			// Normal case, using ddev-router based URLs
@@ -133,6 +136,7 @@ func renderAppDescribe(app *ddevapp.DdevApp, desc map[string]interface{}) (strin
 				} else if httpURL, ok = v["http_url"]; ok {
 					urlPortParts = append(urlPortParts, httpURL)
 				}
+
 			// Gitpod, web container only, using port proxied by Gitpod
 			case (nodeps.IsGitpod() || nodeps.IsCodespaces()) && k == "web":
 				urlPortParts = append(urlPortParts, app.GetPrimaryURL())
@@ -146,13 +150,16 @@ func renderAppDescribe(app *ddevapp.DdevApp, desc map[string]interface{}) (strin
 			}
 
 			if p, ok := v["exposed_ports"]; ok {
-				urlPortParts = append(urlPortParts, "InDocker: "+v["short_name"]+":"+p)
+				if p != "" {
+					urlPortParts = append(urlPortParts, "InDocker: "+v["short_name"]+":"+p)
+				} else {
+					urlPortParts = append(urlPortParts, "InDocker: "+v["short_name"])
+				}
 			}
+
 			if p, ok := v["host_ports"]; ok && p != "" {
 				urlPortParts = append(urlPortParts, "Host: 127.0.0.1:"+p)
 			}
-
-			extraInfo := []string{}
 
 			// Get extra info for web container
 			if k == "web" {
@@ -180,7 +187,7 @@ func renderAppDescribe(app *ddevapp.DdevApp, desc map[string]interface{}) (strin
 			if _, ok := desc["mailpit_https_url"]; ok {
 				mailpitURL = desc["mailpit_https_url"].(string)
 			}
-			t.AppendRow(table.Row{"Mailpit", "", fmt.Sprintf("Mailpit: %s\n`ddev launch -m`", mailpitURL)})
+			t.AppendRow(table.Row{"Mailpit", "", fmt.Sprintf("Mailpit: %s\nLaunch: ddev mailpit", mailpitURL)})
 
 			//WebExtraExposedPorts stanza
 			for _, extraPort := range app.WebExtraExposedPorts {

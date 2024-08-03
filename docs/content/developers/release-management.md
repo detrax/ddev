@@ -6,17 +6,17 @@ search:
 
 ## Release process and tools
 
-* [Goreleaser Pro](https://goreleaser.com/pro/) is used to do the actual releasing using [.goreleaser.yml](https://github.com/ddev/ddev/blob/master/.goreleaser.yml). Goreleaser Pro is a licensed product that requires a license key, which is in the GitHub Workflow configuration and is available in LastPass to DDEV maintainers who need it.
-* The [Master Build/Release GitHub Action](https://github.com/ddev/ddev/blob/master/.github/workflows/master-build.yml) does the actual running of the goreleaser actions and provides the needed secrets.
+* [GoReleaser Pro](https://goreleaser.com/pro/) is used to do the actual releasing using [.goreleaser.yml](https://github.com/ddev/ddev/blob/master/.goreleaser.yml). GoReleaser Pro is a licensed product that requires separate installation and a license key, which is in the GitHub Workflow configuration and is available in 1Password to DDEV maintainers who need it.
+* The [Master Build/Release GitHub Action](https://github.com/ddev/ddev/blob/master/.github/workflows/master-build.yml) does the actual running of the GoReleaser actions and provides the needed secrets.
 
 ## GitHub Actions Required Secrets
 
 ### How to add new people to these accounts
 
-* AUR is Arch Linux User Repository. `ddev-bin` is at `https://aur.archlinux.org/packages/ddev-bin`. The current maintainer of this is @cweagans, who can add co-maintainers.
-* The [chocolatey](https://community.chocolatey.org/packages/ddev/) package. Additional maintainers can be added at (login required) `https://community.chocolatey.org/packages/ddev/1.22.1/ManagePackageOwners`; they could then create tokens to push it.
+* AUR is Arch Linux User Repository. `ddev-bin` is at `https://aur.archlinux.org/packages/ddev-bin`. The current maintainer of this is @rfay, who can add co-maintainers.
+* The [chocolatey](https://community.chocolatey.org/packages/ddev/) package. Additional maintainers can be added at (login required) `https://community.chocolatey.org/packages/ddev/ManagePackageOwners`; they could then create tokens to push it.
 * GitHub requires write access to this repository, either via permissions on the repository or on the org.
-* Apple signing and notarization requires access to the Localdev Foundation group on `https://developer.apple.com`. It's easy enough to add additional people.
+* Apple signing and notarization requires access to the DDEV Foundation group on `https://developer.apple.com`. It's easy enough to add additional people.
 * Windows signing is an awkward process that requires a dongle. When the current signing certificate expires we definitely want the simpler approach.
 * Discord
 * Docker
@@ -28,17 +28,22 @@ The following “Repository secret” environment variables must be added to <ht
 
 * `AMPLITUDE_API_KEY`: Key that enables Amplitude reporting. Environment variable for Make is `AmplitudeAPIKey`.
 * `AMPLITUDE_API_KEY_DEV`: Key that enables Amplitude reporting for development versions e.g. a PR build. Environment variable for Make is `AmplitudeAPIKey`.
-* `AUR_SSH_PRIVATE_KEY`: Private ssh key for the `ddev-releaser` user. This must be processed into a single line, for example, `perl -p -e 's/\n/<SPLIT>/' ~/.ssh/id_rsa_ddev_releaser| pbcopy`.
+* `AUR_EDGE_GIT_URL`: The Git URL for AUR edge (normally `ddev-edge-bin`), for example `ssh://aur@aur.archlinux.org/ddev-edge-bin.git`.
+* `AUR_STABLE_GIT_URL`: The Git URL for AUR stable (normally `ddev-bin`), for example `ssh://aur@aur.archlinux.org/ddev-bin.git`.
+* `AUR_SSH_PRIVATE_KEY`: Private SSH key for the `ddev-releaser` user. This must be processed into a single line, for example, `perl -p -e 's/\n/<SPLIT>/' ~/.ssh/id_rsa_ddev_releaser| pbcopy`.
 * `CHOCOLATEY_API_KEY`: API key for Chocolatey.
-* `DDEV_GITHUB_TOKEN`: GitHub token that gives access to create releases and push to the Homebrew repositories.
+* `DDEV_GITHUB_TOKEN`: GitHub personal token (`repo` scope, classic PAT) that gives access to create releases and push to the Homebrew repositories.
 * `DDEV_MACOS_APP_PASSWORD`: Password used for notarization, see [signing_tools](https://github.com/ddev/signing_tools).
 * `DDEV_MACOS_SIGNING_PASSWORD`: Password for the macOS signing key, see [signing_tools](https://github.com/ddev/signing_tools).
+* `DDEV_MAIN_REPO_ORGNAME`: The organization to be used for testing, normally `ddev` but it may be `ddev-test` for the test organization.
 * `DDEV_WINDOWS_SIGNING_PASSWORD`: Windows signing password.
-* `SEGMENTKEY`: Key that enables Segment reporting. Environment variable for Make is `SegmentKey`.
+* `DOCKERHUB_USERNAME`: Username for pushing to `hub.docker.com` or updating image descriptions.
+* `DOCKERHUB_TOKEN`: Token for pushing to `hub.docker.com`. or updating image descriptions.
 * `FURY_ACCOUNT`: [Gemfury](https://gemfury.com) account that receives package pushes.
 * `FURY_TOKEN`: Push token assigned to the above Gemfury account.
-* `AUR_STABLE_GIT_URL`: The Git URL for AUR stable (normally `ddev-bin`), for example `ssh://aur@aur.archlinux.org/ddev-bin.git`.
-* `AUR_EDGE_GIT_URL`: The Git URL for AUR edge (normally `ddev-edge-bin`), for example `ssh://aur@aur.archlinux.org/ddev-edge-bin.git`.
+* `GORELEASER_KEY`: License key for GoReleaser Pro.
+* `HOMEBREW_EDGE_REPOSITORY`: Like `ddev/homebrew-ddev-edge` but may be `ddev-test/homebrew-ddev-edge`.
+* `HOMEBREW_STABLE_REPOSITORY`: Like `ddev/homebrew-ddev-edge` but may be `ddev/homebrew-ddev-edge`.
 
 ## Creating a Release
 
@@ -52,8 +57,7 @@ The following “Repository secret” environment variables must be added to <ht
 * Update `ddev/ddev-webserver` to use the new version of `ddev/ddev-php-base` and push it with the proper tag.
 * Make sure the Docker images are all tagged and pushed.
 * Make sure [`pkg/versionconstants/versionconstants.go`](https://github.com/ddev/ddev/blob/master/pkg/versionconstants/versionconstants.go) is all set to point to the new images and tests have been run.
-* If the [`devcontainer-feature.json`](https://github.com/ddev/ddev/blob/master/.github/devcontainers/src/install-ddev/devcontainer-feature.json) (for GitHub Codespaces) needs to be updated, use the [`devcontainer` CLI](https://github.com/devcontainers/cli) and a GITHUB_TOKEN that has power to manage packages, like `https://github.com/settings/tokens/1121534855` (`Package management token - see https://ddev.readthedocs.io/en/latest/developers/release-management/#prerelease-tasks`)
-    * Change the version in `.github/devcontainers/src/install-ddev/devcontainer-feature.json`.
+* If the [`devcontainer-feature.json`](https://github.com/ddev/ddev/blob/master/.github/devcontainers/src/install-ddev/devcontainer-feature.json) (for GitHub Codespaces) needs to be updated, use the [`devcontainer` CLI](https://github.com/devcontainers/cli) and a `GITHUB_TOKEN` that has power to manage packages (`write:packages` scope, classic PAT), change the version in the [`devcontainer-feature.json`](https://github.com/ddev/ddev/blob/master/.github/devcontainers/src/install-ddev/devcontainer-feature.json) and run:
 
     ```bash
     cd .github/devcontainers/src
@@ -110,7 +114,7 @@ While it’s more error-prone, images can be pushed from the command line:
 5. `make push VERSION=<release_version> DOCKER_ARGS=--no-cache` for most of the images. For `ddev-dbserver` it’s `make PUSH=true VERSION=<release_version> DOCKER_ARGS=--no-cache`. There’s a [push-all.sh](https://github.com/ddev/ddev/blob/master/containers/push-all.sh) script to update all of them, but it takes forever.
 6. `ddev-dbserver` images can be pushed with `make PUSH=true VERSION=<release_version> DOCKER_ARGS=--no-cache` from the `containers/ddev-dbserver` directory.
 
-## Maintaining `ddev-dbserver` MySQL 5.7 & 8.0 ARM64 Images
+## Maintaining `ddev-dbserver` MySQL 5.7 and 8.0 ARM64 Images
 
 Sadly, there are no ARM64 Docker images for MySQL 5.7 and 8.0, so we have our own process to maintain [ddev/mysql-arm64-images](https://github.com/ddev/mysql-arm64-images) and [ddev/xtrabackup-build](https://github.com/ddev/xtrabackup-build) images for DDEV.
 
@@ -123,13 +127,13 @@ Sadly, there are no ARM64 Docker images for MySQL 5.7 and 8.0, so we have our ow
 
 ## Actual Release Docker Image Updates
 
-We don’t actually build every image for every point release. If there have been no changes to `ddev-traefik-router` or `ddev-ssh-agent`, for example, we only usually push those and update `pkg/version/version.go` on major releases.
+We may not build every image for every point release. If there have been no changes to `ddev-traefik-router` or `ddev-ssh-agent`, for example, we may not push those and update `pkg/version/version.go` on major releases.
 
 But here are the steps for building:
 
 1. The `ddev/ddev-php-base` image must be updated as necessary with a new tag before pushing `ddev-webserver`. You can do this using the [process above](#pushing-docker-images-with-the-github-actions-workflow).
 2. The `ddev/ddev-webserver` Dockerfile must `FROM ddev/ddev-php-base:<tag>` before building/pushing `ddev-webserver`. But then it can be pushed using either the GitHub Actions or the manual technique.
-3. If you’re bumping `ddev-dbserver` 8.0 minor release, follow the upstream [Maintaining ddev-dbserver MySQL 5.7 & 8.0 ARM64 Images](#maintaining-ddev-dbserver-mysql-57--80-arm64-images) instructions.
+3. If you’re bumping `ddev-dbserver` 8.0 minor release, follow the upstream [Maintaining ddev-dbserver MySQL 5.7 & 8.0 ARM64 Images](#maintaining-ddev-dbserver-mysql-57-and-80-arm64-images) instructions.
 4. Update `pkg/version/version.go` with the correct versions for the new images, and run all the tests.
 
 ## Manually Updating Homebrew Formulas
@@ -176,7 +180,7 @@ However, you can manually publish the release to [the DDEV AUR repository](https
 
 This is done automatically by the release build on a dedicated Windows test runner (GitHub Actions runner) named `testbot-asus-win10pro`. You would need to do this process manually on that build machine or install the fob on another machine.
 
-**After rebooting this machine, sometimes an automated reboot, the password for the security fob has to be re-entered or Windows signing will fail. We do this by opening up `tb-win11-06` using Chrome Remote Desktop (or manually physically opening it), opening Git Bash, and `cd ~/tmp && signtool sign gsudo.exe`. There happens to be a `gsudo.exe` there but it doesn’t matter what you sign—the idea is to pop up the GUI where you enter the password (which is in LastPass).**
+**After rebooting this machine, sometimes an automated reboot, the password for the security fob has to be re-entered or Windows signing will fail. We do this by opening up `tb-win11-06` using Chrome Remote Desktop (or manually physically opening it), opening Git Bash, and `cd ~/tmp && signtool sign gsudo.exe`. There happens to be a `gsudo.exe` there but it doesn’t matter what you sign—the idea is to pop up the GUI where you enter the password (which is in 1Password).**
 
 ### Basic Instructions
 
@@ -200,3 +204,37 @@ The Linux `apt` and `yum`/`rpm` packages are built and pushed by the `nfpms` and
 * The `pkg.ddev.com` domain name is set up as a custom alias for our package repositories; see `https://manage.fury.io/manage/drud/domains`. (Users do not see `drud` anywhere. Although we could have moved to a new organization for this, the existing repositories contain all the historical versions so it made sense to be less disruptive.)
 * The `pkg.ddev.com` `CNAME` is managed in CloudFlare because `ddev.com` is managed there.
 * The fury.io tokens are in DDEV’s shared 1Password account.
+
+## Testing Release Creation
+
+When significant changes are made to the `.goreleaser.yml` or related configuration, it's important to be able to test without actually deploying to `ddev/ddev/releases` of course. We have two ways to test the configuration; we can run `goreleaser` manually for simpler tests, or run a full release on `ddev-test/ddev` where needed.
+
+### Running `goreleaser` manually
+
+This approach is great for seeing what artifacts get created, without deploying them.
+
+Prerequisites:
+
+* GoReleaser Pro must be installed
+* `export GORELEASER_KEY=<key>`
+
+```bash
+export GITHUB_REPOSITORY_OWNER=ddev-test
+git tag <tagname> # Try to include context like PR number, for example v1.22.8-PR5824
+make windows_amd64 windows_arm64 darwin_amd64 darwin_arm64 linux_amd64 linux_arm64 completions
+goreleaser release --prepare --nightly --clean
+```
+
+This will create all the artifacts that would have been pushed in the `dist` directory. You can copy Linux packages from there to test them manually, download the built tarballs for use elsewhere, install Homebrew package manually, for example:
+
+```bash
+brew install ./dist/homebrew/Formula/ddev.rb
+```
+
+### Creating a test release on `ddev-test/ddev`
+
+[ddev-test/ddev](https://github.com/ddev-test/ddev) is now set up for actual release testing. It has all or most of the environment variables set up already. It also acts against `ddev-test/homebrew-ddev` and `ddev-test/homebrew-ddev-edge` so you can test Homebrew publishing.
+
+1. Create a branch on `ddev-test/ddev`.
+2. Using the web UI, create a release using that branch as base. The release tag must start with `v1.`. Where possible, please use a release tag that includes context about the PR you are working against, like `v1.28.8-PR2022FixStuff`, and include in the release notes a link to the issue. The tag must be a valid Semantic Version tag, so don't use underscores, etc.
+3. Test out the resulting artifacts that get published or deployed.

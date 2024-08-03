@@ -4,7 +4,7 @@ The general workflow for contributing to this project is outlined in this docume
 
 ## Create an Issue
 
-If you find a bug in this project, have trouble following the documentation, or have a question about the project, create an issue! There’s nothing to it and whatever issue you’re having, you’re likely not the only one, so others will find your issue helpful, too. For more information on how issues work, check out GitHub's [Issues guide](https://docs.github.com/en/issues/tracking-your-work-with-issues/about-issues). Or there are lots of [other places for immediate support](https://ddev.readthedocs.io/en/latest/users/support).
+If you find a bug in this project, have trouble following the documentation, or have a question about the project, create an issue! There’s nothing to it and whatever issue you’re having, you’re likely not the only one, so others will find your issue helpful, too. For more information on how issues work, check out GitHub's [Issues guide](https://docs.github.com/en/issues/tracking-your-work-with-issues/about-issues). Or there are lots of [other places for immediate support](https://ddev.readthedocs.io/en/stable/users/support/).
 
 ### Issues Pro Tips
 
@@ -16,7 +16,7 @@ If you find a bug in this project, have trouble following the documentation, or 
 
 ## Stack Overflow Questions and Documentation
 
-There are a number of situations where a particular approach to a DDEV solution can be stated more easily in [Stack Overflow](https://stackoverflow.com/tags/ddev) (use the "ddev" tag). We respond there quickly, but if you know the answer already, create the question there and then click the checkbox at the bottom "Answer your own question". Stack Overflow is often the best place to incubate documentation that affects just a few people or that just needs time to get responses. And it's highly searchable on the web.
+There are a number of situations where a particular approach to a DDEV solution can be stated more easily in [Stack Overflow](https://stackoverflow.com/tags/ddev) (use the "ddev" tag). We respond there quickly, but if you know the answer already, create the question there and then click the checkbox at the bottom "Answer your own question". Stack Overflow is often the best place to incubate documentation that affects only a few people or that needs time to get responses. And it's highly searchable on the web.
 
 ## Pull Request
 

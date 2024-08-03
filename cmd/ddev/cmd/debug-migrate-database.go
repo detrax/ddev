@@ -2,12 +2,13 @@ package cmd
 
 import (
 	"fmt"
+	"os"
+	"strings"
+
 	"github.com/ddev/ddev/pkg/ddevapp"
 	"github.com/ddev/ddev/pkg/nodeps"
 	"github.com/ddev/ddev/pkg/util"
 	"github.com/spf13/cobra"
-	"os"
-	"strings"
 )
 
 // DebugMigrateDatabase Migrates a database to a new type
@@ -15,9 +16,9 @@ var DebugMigrateDatabase = &cobra.Command{
 	Use:   "migrate-database",
 	Short: "Migrate a MySQL or MariaDB database to a different dbtype:dbversion; works only with MySQL and MariaDB, not with PostgreSQL",
 	Example: `ddev debug migrate-database mysql:8.0
-ddev debug migrate-database mariadb:10.7`,
+ddev debug migrate-database mariadb:11.4`,
 	Args: cobra.ExactArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, args []string) {
 		app, err := ddevapp.GetActiveApp("")
 		if err != nil {
 			util.Failed("Can't find active project: %v", err)
@@ -35,7 +36,7 @@ ddev debug migrate-database mariadb:10.7`,
 		if !strings.HasPrefix(newDBVersionType, nodeps.MariaDB) && !strings.HasPrefix(newDBVersionType, nodeps.MySQL) {
 			util.Failed("This command can only convert between MariaDB and MySQL")
 		}
-		if !(nodeps.IsValidMariaDBVersion(newDBVersionType) || nodeps.IsValidMySQLVersion(newDBVersionType)) && !(nodeps.IsValidMariaDBVersion(existingDBType) || nodeps.IsValidMySQLVersion(existingDBType)) {
+		if (nodeps.IsValidMariaDBVersion(newDBVersionType) || nodeps.IsValidMySQLVersion(newDBVersionType)) && (nodeps.IsValidMariaDBVersion(existingDBType) || nodeps.IsValidMySQLVersion(existingDBType)) {
 			if !util.Confirm(fmt.Sprintf("Is it OK to attempt conversion from %s to %s?\nThis will export your database, create a snapshot,\nthen destroy your current database and import into the new database type.\nIt only migrates the 'db' database", existingDBType, newDBVersionType)) {
 				util.Failed("migrate-database cancelled")
 			}
@@ -79,7 +80,7 @@ ddev debug migrate-database mariadb:10.7`,
 			util.Success("Database was converted to %s", newDBVersionType)
 			return
 		}
-		util.Failed("Invalid target source database type (%s) or target database type (%s)", existingDBType, newDBVersionType)
+		util.Failed("Invalid source database type (%s) or target database type (%s)", existingDBType, newDBVersionType)
 	},
 }
 

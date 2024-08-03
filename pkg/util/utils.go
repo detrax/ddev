@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"os"
 	osexec "os/exec"
 	"os/user"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -81,6 +83,23 @@ func Verbose(format string, a ...interface{}) {
 		s := fmt.Sprintf(format, a...)
 		output.UserOut.Debugf("%s %s", n.Format("2006-01-02T15:04:05.999"), s)
 	}
+}
+
+// ShowDots displays dots one per second until done gets true
+func ShowDots() chan bool {
+	done := make(chan bool)
+	go func() {
+		for {
+			select {
+			case <-done:
+				return
+			default:
+				_, _ = fmt.Fprintf(os.Stderr, ".")
+				time.Sleep(1 * time.Second)
+			}
+		}
+	}()
+	return done
 }
 
 // FormatPlural is a simple wrapper which returns different strings based on the count value.
@@ -332,4 +351,40 @@ func SliceToUniqueSlice(inSlice *[]string) []string {
 		return nil
 	}
 	return newSlice
+}
+
+// ArrayToReadableOutput generates a printable list of files in a readable way
+func ArrayToReadableOutput(slice []string) (response string, err error) {
+	if len(slice) == 0 {
+		return "", fmt.Errorf("empty slice")
+	}
+	return "[\n\t" + strings.Join(slice, "\n\t") + "\n]", nil
+}
+
+// WindowsPathToCygwinPath changes C:/path/to/something to //c/path/to/something
+// This is required for Docker bind mounts on Docker toolbox.
+// Sadly, if we have a Windows drive name, it has to be converted from C:/ to //c for Win10Home/Docker toolbox
+func WindowsPathToCygwinPath(windowsPath string) string {
+	windowsPath = filepath.ToSlash(windowsPath)
+	if string(windowsPath[1]) == ":" {
+		drive := strings.ToLower(string(windowsPath[0]))
+		windowsPath = "/" + drive + windowsPath[2:]
+	}
+	return windowsPath
+}
+
+// Chmod changes the file permissions of the named path,
+// if the path already has the necessary permissions, do nothing.
+// This is needed so that Mutagen doesn't track this change,
+// don't use os.Chmod in the DDEV code, use util.Chmod instead.
+func Chmod(path string, mode os.FileMode) error {
+	fileInfo, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	// If the mode is the same, do nothing
+	if fileInfo.Mode().Perm() == mode {
+		return nil
+	}
+	return os.Chmod(path, mode)
 }

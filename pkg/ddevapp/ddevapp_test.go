@@ -19,7 +19,7 @@ import (
 	"github.com/ddev/ddev/pkg/archive"
 	"github.com/ddev/ddev/pkg/config/types"
 	"github.com/ddev/ddev/pkg/ddevapp"
-	dockerImages "github.com/ddev/ddev/pkg/docker"
+	ddevImages "github.com/ddev/ddev/pkg/docker"
 	"github.com/ddev/ddev/pkg/dockerutil"
 	"github.com/ddev/ddev/pkg/exec"
 	"github.com/ddev/ddev/pkg/fileutil"
@@ -29,7 +29,9 @@ import (
 	"github.com/ddev/ddev/pkg/testcommon"
 	"github.com/ddev/ddev/pkg/util"
 	"github.com/ddev/ddev/pkg/versionconstants"
-	docker "github.com/fsouza/go-dockerclient"
+	dockerContainer "github.com/docker/docker/api/types/container"
+	dockerVolume "github.com/docker/docker/api/types/volume"
+	"github.com/docker/go-connections/nat"
 	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
 	asrt "github.com/stretchr/testify/assert"
@@ -62,7 +64,7 @@ var (
 			DBTarURL:                      "https://github.com/ddev/ddev_test_tarballs/releases/download/v1.1/d8_umami.sql.tar.gz",
 			DBZipURL:                      "https://github.com/ddev/ddev_test_tarballs/releases/download/v1.1/d8_umami.sql.zip",
 			FullSiteTarballURL:            "",
-			Type:                          nodeps.AppTypeDrupal8,
+			Type:                          nodeps.AppTypeDrupal,
 			Docroot:                       "",
 			Safe200URIWithExpectation:     testcommon.URIWithExpect{URI: "/README.txt", Expect: "Drupal is an open source content management platform"},
 			DynamicURI:                    testcommon.URIWithExpect{URI: "/node/2", Expect: "Vegan chocolate and nut brownies"},
@@ -145,22 +147,23 @@ var (
 		// Create a project named testpkgmagento2 and use the magento2 quickstart
 		// Look at app/env.php and login at the key given by "backend->frontname" with the admin
 		// credentials in the quickstart.
-		// Create a product named Unicycle with a picture called randy_4th_of_july_unicycle.jpg
+		// Create a product named Unicycle with a picture called unicycle.jpg
+		// Full docs and management/upgrade at https://github.com/ddev/test-magento2
 		{
 			Name: "testpkgmagento2",
-			// echo "This is a junk" >pub/junk.txt && tar -czf .tarballs/testpkgmagento2_code_no_media.magento2.4.4.tgz --exclude=.ddev --exclude=var --exclude=pub/media --exclude=.tarballs --exclude=app/etc/env.php .
-			SourceURL:                     "https://github.com/ddev/ddev_test_tarballs/releases/download/v1.1/testpkgmagento2_code_no_media.magento2.4.4.tgz",
+			// echo "This is a junk" >pub/junk.txt && tar -czf .tarballs/testpkgmagento2_code_no_media.magento2.4.6-p4.tgz --exclude=.ddev --exclude=var --exclude=pub/media --exclude=.tarballs --exclude=app/etc/env.php .
+			SourceURL:                     "https://github.com/ddev/test-magento2/releases/download/2.4.6-p4/testpkgmagento2_code_no_media.magento2.4.6-p4.tgz",
 			ArchiveInternalExtractionPath: "",
-			// ddev export-db --gzip=false --file=.tarballs/db.sql && tar -czf .tarballs/testpkgmagento2.magento2.4.4.db.tgz -C .tarballs db.sql
-			DBTarURL: "https://github.com/ddev/ddev_test_tarballs/releases/download/v1.1/testpkgmagento2.magento2.4.4.db.tgz",
-			// tar -czf .tarballs/testpkgmagento2_files.magento2.4.4.tgz -C pub/media .
-			FilesTarballURL:           "https://github.com/ddev/ddev_test_tarballs/releases/download/v1.1/testpkgmagento2_files.magento2.4.4.tgz",
+			// ddev export-db --gzip=false --file=.tarballs/db.sql && tar -czf .tarballs/testpkgmagento2.magento2.4.6-p4.db.tgz -C .tarballs db.sql
+			DBTarURL: "https://github.com/ddev/test-magento2/releases/download/2.4.6-p4/testpkgmagento2.magento2.4.6-p4.db.tgz",
+			// tar -czf .tarballs/testpkgmagento2_files.magento2.4.6-p4.tgz -C pub/media .
+			FilesTarballURL:           "https://github.com/ddev/test-magento2/releases/download/2.4.6-p4/testpkgmagento2_files.magento2.4.6-p4.tgz",
 			FullSiteTarballURL:        "",
 			Docroot:                   "pub",
 			Type:                      nodeps.AppTypeMagento2,
 			Safe200URIWithExpectation: testcommon.URIWithExpect{URI: "/junk.txt", Expect: `This is a junk`},
-			DynamicURI:                testcommon.URIWithExpect{URI: "/index.php/unicycle.html", Expect: "Unicycle"},
-			FilesImageURI:             "/media/catalog/product/r/a/randy_4th_of_july_unicycle_1.jpg",
+			DynamicURI:                testcommon.URIWithExpect{URI: "/index.php/unicycle.html", Expect: "unicycle"},
+			FilesImageURI:             "/media/catalog/product/u/n/unicycle.jpg",
 		},
 		// 8: drupal9
 		{
@@ -172,7 +175,7 @@ var (
 			DBTarURL:                      "https://github.com/ddev/ddev_test_tarballs/releases/download/v1.1/d9_umami_sql.tar.gz",
 			DBZipURL:                      "https://github.com/ddev/ddev_test_tarballs/releases/download/v1.1/d9_umami.sql.zip",
 			FullSiteTarballURL:            "",
-			Type:                          nodeps.AppTypeDrupal9,
+			Type:                          nodeps.AppTypeDrupal,
 			Docroot:                       "",
 			Safe200URIWithExpectation:     testcommon.URIWithExpect{URI: "/README.md", Expect: "Drupal is an open source content management platform"},
 			DynamicURI:                    testcommon.URIWithExpect{URI: "/node/1", Expect: "Deep mediterranean quiche"},
@@ -181,11 +184,11 @@ var (
 		// 9: laravel
 		{
 			Name:                          "TestPkgLaravel",
-			SourceURL:                     "https://github.com/ddev/test-laravel/archive/refs/tags/10.0.5.2.tar.gz",
-			ArchiveInternalExtractionPath: "test-laravel-10.0.5.2/",
+			SourceURL:                     "https://github.com/ddev/test-laravel/archive/refs/tags/11.0.3.1.tar.gz",
+			ArchiveInternalExtractionPath: "test-laravel-11.0.3.1/",
 			FilesTarballURL:               "",
 			FilesZipballURL:               "",
-			DBTarURL:                      "https://github.com/ddev/test-laravel/releases/download/10.0.5.2/db.sql.tar.gz",
+			DBTarURL:                      "https://github.com/ddev/test-laravel/releases/download/11.0.3.1/db.sql.tar.gz",
 			DBZipURL:                      "",
 			FullSiteTarballURL:            "",
 			Type:                          nodeps.AppTypeLaravel,
@@ -198,17 +201,18 @@ var (
 		{
 			Name: "testpkgshopware6",
 			// tar -czf .tarballs/shopware6_code.tgz --exclude=public/media .
-			SourceURL:                     "https://github.com/ddev/ddev_test_tarballs/releases/download/v1.1/shopware6_code.tgz",
+			SourceURL:                     "https://github.com/ddev/test-shopware6/releases/download/v1.0.4/shopware6_code.tgz",
 			ArchiveInternalExtractionPath: "",
-			// cd public/media && tar -czf ../../.tarballs/shopware6_files.tgz
-			FilesTarballURL:           "https://github.com/ddev/ddev_test_tarballs/releases/download/v1.1/shopware6_files.tgz",
-			DBTarURL:                  "https://github.com/ddev/ddev_test_tarballs/releases/download/v1.1/shopware6_db.sql.tar.gz",
+			// cd public/media && tar -czf ../../.tarballs/shopware6_files.tgz .
+			FilesTarballURL: "https://github.com/ddev/test-shopware6/releases/download/v1.0.4/shopware6_files.tgz",
+			// ddev export-db --gzip=false --file=.tarballs/db.sql && tar -czf .tarballs/shopware6_db.sql.tar.gz -C .tarballs db.sql
+			DBTarURL:                  "https://github.com/ddev/test-shopware6/releases/download/v1.0.4/shopware6_db.sql.tar.gz",
 			FullSiteTarballURL:        "",
 			Type:                      nodeps.AppTypeShopware6,
 			Docroot:                   "public",
 			Safe200URIWithExpectation: testcommon.URIWithExpect{URI: "/maintenance.html", Expect: "Our website is currently undergoing maintenance"},
 			DynamicURI:                testcommon.URIWithExpect{URI: "/", Expect: "0180 - 000000"},
-			FilesImageURI:             "/media//05/23/ee/1658172194/shirt_red_600x600.jpg",
+			FilesImageURI:             "/thumbnail/4e/6e/dc/1700858326/hemd_600x600_1920x1920.jpg",
 		},
 		// 11: php
 		{
@@ -225,12 +229,12 @@ var (
 		// 12: drupal10
 		{
 			Name:                          "TestPkgDrupal10",
-			SourceURL:                     "https://ftp.drupal.org/files/projects/drupal-10.1.1.tar.gz",
-			ArchiveInternalExtractionPath: "drupal-10.1.1/",
+			SourceURL:                     "https://ftp.drupal.org/files/projects/drupal-10.1.6.tar.gz",
+			ArchiveInternalExtractionPath: "drupal-10.1.6/",
 			FilesTarballURL:               "https://github.com/ddev/ddev_test_tarballs/releases/download/v1.1/drupal10-files.tgz",
 			DBTarURL:                      "https://github.com/ddev/ddev_test_tarballs/releases/download/v1.1/drupal10-alpha6.sql.tar.gz",
 			FullSiteTarballURL:            "",
-			Type:                          nodeps.AppTypeDrupal10,
+			Type:                          nodeps.AppTypeDrupal,
 			Docroot:                       "",
 			Safe200URIWithExpectation:     testcommon.URIWithExpect{URI: "/README.md", Expect: "Drupal is an open source content management platform"},
 			DynamicURI:                    testcommon.URIWithExpect{URI: "/", Expect: "This is a test page"},
@@ -329,6 +333,36 @@ var (
 			Docroot:                       "public",
 			Type:                          nodeps.AppTypeSilverstripe,
 			DynamicURI:                    testcommon.URIWithExpect{URI: "/", Expect: "<meta name=\"generator\" content=\"Silverstripe CMS 5.0\">"},
+		},
+		// 18: CakePHP
+		{
+			Name:                          "TestPkgCakePHP",
+			SourceURL:                     "https://github.com/ddev/test-cakephp/archive/refs/tags/5.0.1.1.tar.gz",
+			ArchiveInternalExtractionPath: "test-cakephp-5.0.1.1/",
+			FilesTarballURL:               "",
+			FilesZipballURL:               "",
+			DBTarURL:                      "https://github.com/ddev/test-cakephp/releases/download/5.0.1.1/db.sql.tar.gz",
+			DBZipURL:                      "",
+			FullSiteTarballURL:            "",
+			Type:                          nodeps.AppTypeCakePHP,
+			Docroot:                       "webroot",
+			Safe200URIWithExpectation:     testcommon.URIWithExpect{URI: "/static/page.html", Expect: "This is a static page"},
+			DynamicURI:                    testcommon.URIWithExpect{URI: "/", Expect: "CakePHP is able to connect to the database"},
+			FilesImageURI:                 "/img/cake.logo.svg",
+		},
+		// 19: drupal11
+		{
+			Name:                          "TestPkgDrupal11",
+			SourceURL:                     "https://github.com/ddev/test-drupal11/archive/refs/tags/11.0.0.tar.gz",
+			ArchiveInternalExtractionPath: "test-drupal11-11.0.0/",
+			FilesTarballURL:               "https://github.com/ddev/test-drupal11/releases/download/11.0.0/files.tgz",
+			DBTarURL:                      "https://github.com/ddev/test-drupal11/releases/download/11.0.0/db.sql.tar.gz",
+			FullSiteTarballURL:            "",
+			Type:                          nodeps.AppTypeDrupal,
+			Docroot:                       "web",
+			Safe200URIWithExpectation:     testcommon.URIWithExpect{URI: "/README.md", Expect: "Drupal is an open source content management platform"},
+			DynamicURI:                    testcommon.URIWithExpect{URI: "/", Expect: "Super easy vegetarian pasta bake TEST PROJECT"},
+			FilesImageURI:                 "/sites/default/files/Logo.png",
 		},
 	}
 
@@ -490,8 +524,8 @@ func TestDdevStart(t *testing.T) {
 	})
 
 	// Make sure the -built Docker image exists before stop
-	webBuilt := dockerImages.GetWebImage() + "-" + site.Name + "-built"
-	dbBuilt := dockerImages.GetWebImage() + "-" + site.Name + "-built"
+	webBuilt := ddevImages.GetWebImage() + "-" + site.Name + "-built"
+	dbBuilt := ddevImages.GetWebImage() + "-" + site.Name + "-built"
 	exists, err := dockerutil.ImageExistsLocally(webBuilt)
 	assert.NoError(err)
 	assert.True(exists)
@@ -550,8 +584,7 @@ func TestDdevStart(t *testing.T) {
 	another.Dir = copyDir
 
 	t.Cleanup(func() {
-		err = os.RemoveAll(copyDir)
-		assert.NoError(err)
+		_ = os.RemoveAll(copyDir)
 	})
 
 	badapp := &ddevapp.DdevApp{}
@@ -575,8 +608,7 @@ func TestDdevStart(t *testing.T) {
 	assert.NoError(err)
 
 	t.Cleanup(func() {
-		err = os.Remove(symlink)
-		assert.NoError(err)
+		_ = os.Remove(symlink)
 	})
 
 	symlinkApp := &ddevapp.DdevApp{}
@@ -620,10 +652,8 @@ func TestDdevStartCustomEntrypoint(t *testing.T) {
 		assert.NoError(err)
 		err = app.Stop(true, false)
 		assert.NoError(err)
-		err = os.RemoveAll(filepath.Join(app.AppRoot, "env.php"))
-		assert.NoError(err)
-		err = fileutil.PurgeDirectory(app.GetConfigPath("web-entrypoint.d"))
-		assert.NoError(err)
+		_ = os.RemoveAll(filepath.Join(app.AppRoot, "env.php"))
+		_ = fileutil.PurgeDirectory(app.GetConfigPath("web-entrypoint.d"))
 		assert.False(dockerutil.NetworkExists("ddev-" + app.Name + "_default"))
 	})
 
@@ -764,8 +794,7 @@ func TestDdevStartUnmanagedSettings(t *testing.T) {
 		err = os.Chdir(origDir)
 		assert.NoError(err)
 		_ = app.Stop(true, false)
-		err = os.RemoveAll(site.Dir)
-		assert.NoError(err)
+		_ = os.RemoveAll(site.Dir)
 	})
 
 	err = os.Chdir(app.AppRoot)
@@ -874,9 +903,6 @@ func TestDdevNoProjectMount(t *testing.T) {
 
 // TestDdevXdebugEnabled tests running with xdebug_enabled = true, etc.
 func TestDdevXdebugEnabled(t *testing.T) {
-	if dockerutil.IsColima() && os.Getenv("DDEV_TEST_COLIMA_ANYWAY") != "true" {
-		t.Skip("Skipping on Colima because this test doesn't work although manual testing works")
-	}
 	if nodeps.IsWSL2() && dockerutil.IsDockerDesktop() {
 		t.Skip("Skipping on WSL2/Docker Desktop because this test doesn't work although manual testing works")
 	}
@@ -917,8 +943,7 @@ func TestDdevXdebugEnabled(t *testing.T) {
 		assert.NoError(err)
 		err := os.Chdir(origDir)
 		assert.NoError(err)
-		err = os.RemoveAll(projDir)
-		assert.NoError(err)
+		_ = os.RemoveAll(projDir)
 		globalconfig.DdevGlobalConfig.XdebugIDELocation = ""
 		_ = globalconfig.WriteGlobalConfig(globalconfig.DdevGlobalConfig)
 	})
@@ -930,9 +955,12 @@ func TestDdevXdebugEnabled(t *testing.T) {
 
 	// Most of the time there's no reason to do all versions of PHP
 	phpKeys := []string{}
-	// TODO: Re-enable 8.3 when it's available
-	exclusions := []string{"5.6", "7.0", "7.1", "7.2", "7.3", "7.4", "8.0", "8.3"}
+	exclusions := []string{"5.6", "7.0", "7.1", "7.2", "7.3", "7.4", "8.0"}
 	for k := range nodeps.ValidPHPVersions {
+		// TODO: Remove when xdebug available for php8.4
+		if k == nodeps.PHP84 {
+			continue
+		}
 		if os.Getenv("GOTEST_SHORT") != "" && !nodeps.ArrayContainsString(exclusions, k) {
 			phpKeys = append(phpKeys, k)
 		}
@@ -979,8 +1007,8 @@ func TestDdevXdebugEnabled(t *testing.T) {
 			t.Errorf("Aborting Xdebug check for php%s: %v", v, err)
 			continue
 		}
-		// PHP 7.2 through 8.2 get Xdebug 3.0+
-		if nodeps.ArrayContainsString([]string{nodeps.PHP72, nodeps.PHP73, nodeps.PHP74, nodeps.PHP80, nodeps.PHP81, nodeps.PHP82}, app.PHPVersion) {
+		// PHP 7.2 through 8.3 get Xdebug 3.0+
+		if nodeps.ArrayContainsString([]string{nodeps.PHP72, nodeps.PHP73, nodeps.PHP74, nodeps.PHP80, nodeps.PHP81, nodeps.PHP82, nodeps.PHP83}, app.PHPVersion) {
 			assert.Contains(stdout, "xdebug.mode => debug,develop => debug,develop", "xdebug is not enabled for %s", v)
 			assert.Contains(stdout, "xdebug.client_host => host.docker.internal => host.docker.internal")
 		} else {
@@ -1095,9 +1123,12 @@ func TestDdevXhprofEnabled(t *testing.T) {
 	// Does not work with php5.6 anyway (SEGV), for resource conservation
 	// skip older unsupported versions
 	phpKeys := []string{}
-	// TODO: Re-enable 8.3 when it's available
-	exclusions := []string{"5.6", "7.0", "7.1", "7.2", "7.3", "7.4", "8.0", "8.3"}
+	exclusions := []string{"5.6", "7.0", "7.1", "7.2", "7.3", "7.4", "8.0"}
 	for k := range nodeps.ValidPHPVersions {
+		// TODO: Remove when xhprof available for php8.4
+		if k == nodeps.PHP84 {
+			continue
+		}
 		if !nodeps.ArrayContainsString(exclusions, k) {
 			phpKeys = append(phpKeys, k)
 		}
@@ -1117,8 +1148,7 @@ func TestDdevXhprofEnabled(t *testing.T) {
 		assert.NoError(err)
 		err = os.Chdir(origDir)
 		assert.NoError(err)
-		err = os.RemoveAll(projDir)
-		assert.NoError(err)
+		_ = os.RemoveAll(projDir)
 	})
 
 	webserverKeys := make([]string, 0, len(nodeps.ValidWebserverTypes))
@@ -1392,7 +1422,7 @@ func TestDdevImportDB(t *testing.T) {
 			assert.NoError(err)
 			assert.Equal("users\n", out, "Failed to find users table for file %s, stdout='%s', stderr='%s'", file, out, stderr)
 
-			c[nodeps.MariaDB] = `set -eu -o pipefail; mysql -N -e 'SHOW DATABASES;' | egrep -v "^(information_schema|performance_schema|mysql)$"`
+			c[nodeps.MariaDB] = `set -eu -o pipefail; mysql -N -e 'SHOW DATABASES;' | egrep -v "^(information_schema|performance_schema|mysql|sys)$"`
 			c[nodeps.Postgres] = `set -eu -o pipefail; psql -t -c "SELECT datname FROM pg_database;" | egrep -v "template?|postgres"`
 
 			// Verify that no extra database was created
@@ -1411,7 +1441,7 @@ func TestDdevImportDB(t *testing.T) {
 			drupalHashSalt, err := fileutil.FgrepStringInFile(app.SiteDdevSettingsFile, "$drupal_hash_salt")
 			assert.NoError(err)
 			assert.True(drupalHashSalt)
-		case nodeps.AppTypeDrupal9:
+		case nodeps.AppTypeDrupal:
 			settingsHashSalt, err := fileutil.FgrepStringInFile(app.SiteDdevSettingsFile, "settings['hash_salt']")
 			assert.NoError(err)
 			assert.True(settingsHashSalt)
@@ -1614,7 +1644,7 @@ func checkImportDbImports(t *testing.T, app *ddevapp.DdevApp) {
 	// Verify that no additional database was created (this one has a CREATE DATABASE statement)
 	out, _, err = app.Exec(&ddevapp.ExecOpts{
 		Service: "db",
-		Cmd:     `mysql -N -e 'SHOW DATABASES;' | egrep -v "^(information_schema|performance_schema|mysql)$"`,
+		Cmd:     `mysql -N -e 'SHOW DATABASES;' | egrep -v "^(information_schema|performance_schema|mysql|sys)$"`,
 	})
 	assert.NoError(err)
 	assert.Equal("db\n", out)
@@ -1622,6 +1652,9 @@ func checkImportDbImports(t *testing.T, app *ddevapp.DdevApp) {
 
 // TestDdevAllDatabases tests db import/export/snapshot/restore/start with supported database versions
 func TestDdevAllDatabases(t *testing.T) {
+	if dockerutil.IsColima() || dockerutil.IsLima() {
+		t.Skip("Skipping on Lima/Colima")
+	}
 	assert := asrt.New(t)
 
 	dbVersions := nodeps.GetValidDatabaseVersions()
@@ -1629,7 +1662,7 @@ func TestDdevAllDatabases(t *testing.T) {
 	dbVersions = nodeps.RemoveItemFromSlice(dbVersions, "postgres:9")
 	//Use a smaller list if GOTEST_SHORT
 	if os.Getenv("GOTEST_SHORT") != "" {
-		dbVersions = []string{"postgres:10", "postgres:14", "mariadb:10.3", "mariadb:10.4", "mariadb:10.11", "mysql:8.0", "mysql:5.7"}
+		dbVersions = []string{"postgres:14", "mariadb:10.11", "mariadb:10.6", "mariadb:10.4", "mysql:8.0", "mysql:5.7"}
 		t.Logf("Using limited set of database servers because GOTEST_SHORT is set (%v)", dbVersions)
 	}
 
@@ -1684,7 +1717,13 @@ func TestDdevAllDatabases(t *testing.T) {
 
 		startErr := app.Start()
 		if startErr != nil {
-			assert.NoError(startErr, "failed to start %s:%s", dbType, dbVersion)
+			stdout, stderr, err := app.Exec(&ddevapp.ExecOpts{
+				Service: "db",
+				Cmd:     `ls -lR /var/lib/mysql`,
+			})
+			t.Logf("status of /var/lib/mysql; err=%v, stdout=%s\nstderr=%s", err, stdout, stderr)
+			logs, _ := app.CaptureLogs("db", false, "50")
+			assert.NoError(startErr, "failed to start %s:%s, dblogs=\n=========\n%s\n=========\n", dbType, dbVersion, logs)
 			err = app.Stop(true, false)
 			assert.NoError(err)
 			t.Errorf("Continuing/skippping %s due to app.Start() failure %v", dbVersion, startErr)
@@ -1730,7 +1769,7 @@ func TestDdevAllDatabases(t *testing.T) {
 		// Validate contents
 		err = archive.Ungzip("tmp/users1.sql.gz", "tmp")
 		assert.NoError(err)
-		stringFound, err := fileutil.GrepStringInFile("tmp/users1.sql", "CREATE TABLE.*users")
+		stringFound, _, err := fileutil.GrepStringInFile("tmp/users1.sql", "CREATE TABLE.*users")
 		assert.NoError(err)
 		assert.True(stringFound)
 
@@ -1747,7 +1786,7 @@ func TestDdevAllDatabases(t *testing.T) {
 		assert.NoError(err)
 
 		// Validate contents
-		stringFound, err = fileutil.GrepStringInFile("tmp/users2.sql", "CREATE TABLE.*users")
+		stringFound, _, err = fileutil.GrepStringInFile("tmp/users2.sql", "CREATE TABLE.*users")
 		assert.NoError(err)
 		assert.True(stringFound)
 
@@ -1767,8 +1806,10 @@ func TestDdevAllDatabases(t *testing.T) {
 		snapshotName := dbType + "_" + dbVersion + "_" + fileutil.RandomFilenameBase()
 		fullSnapshotName, err := app.Snapshot(snapshotName)
 		if err != nil {
-			assert.NoError(err, "could not create snapshot %s for %s: %v output=%v", snapshotName, dbTypeVersion, err, fullSnapshotName)
-			continue
+			dumpDir := fmt.Sprintf("~/%s-broken-%s", t.Name(), util.RandString(5))
+			_, _ = exec.RunHostCommand(`bash`, `-c`, fmt.Sprintf("cp -r %s %s", app.AppRoot, dumpDir))
+			t.Logf("project was in %s, copying to %s", app.AppRoot, dumpDir)
+			t.Fatalf("could not create snapshot %s for %s: %v output=%v, saved approot=%s", snapshotName, dbTypeVersion, err, fullSnapshotName, dumpDir)
 		}
 
 		snapshotPath, err := ddevapp.GetSnapshotFileFromName(fullSnapshotName, app)
@@ -2005,12 +2046,12 @@ func TestDdevExportDB(t *testing.T) {
 		// Export an alternate database
 		importPath = filepath.Join(testDir, "testdata", t.Name(), dbType, "users.sql")
 		err = app.ImportDB(importPath, "", false, false, "anotherdb")
-		require.NoError(t, err)
+		require.NoError(t, err, `unable to ImportDB(%s, "", false, false anotherdb) with dbType=%s`, dbType)
 		err = app.ExportDB("tmp/anotherdb.sql.gz", "gzip", "anotherdb")
-		assert.NoError(err)
+		require.NoError(t, err, `dbType=%v: unable to ExportDB("/tmp/anotherdb.sql.gz", "gzip"", "anotherdb")`, dbType)
 		importPath = "tmp/anotherdb.sql.gz"
 		err = app.ImportDB(importPath, "", false, false, "thirddb")
-		assert.NoError(err)
+		require.NoError(t, err, `dbType=%v: unable to importDB importPath=%s targetDB=thirddb`, dbType, importPath)
 
 		c := map[string]string{
 			nodeps.MariaDB:  `echo "SELECT COUNT(*) FROM users;" | mysql -N thirddb`,
@@ -2026,6 +2067,237 @@ func TestDdevExportDB(t *testing.T) {
 		assert.Equal("2", out)
 	}
 
+	runTime()
+}
+
+// TestWebserverMariaMySQLDBClient tests functionality of mysql/mariadb
+// database clients in the ddev-webserver
+func TestWebserverMariaMySQLDBClient(t *testing.T) {
+	assert := asrt.New(t)
+
+	// TODO: Add MySQL84 when it gets added to DDEV
+	serverVersions := []string{"mysql:5.7", "mysql:8.0", "mariadb:10.11", "mariadb:10.6", "mariadb:10.4", "mariadb:11.4"}
+
+	app := &ddevapp.DdevApp{}
+	origDir, _ := os.Getwd()
+
+	site := TestSites[0]
+	runTime := util.TimeTrackC(fmt.Sprintf("%s %s", site.Name, t.Name()))
+
+	testcommon.ClearDockerEnv()
+	err := app.Init(site.Dir)
+	assert.NoError(err)
+
+	err = app.Stop(true, false)
+	require.NoError(t, err)
+
+	// Existing DB type in volume should be empty
+	dbType, err := app.GetExistingDBType()
+	assert.NoError(err)
+	assert.Equal("", strings.Trim(dbType, " \n\r\t"))
+
+	// Make sure there isn't an old db laying around
+	_ = dockerutil.RemoveVolume(app.Name + "-mariadb")
+	t.Cleanup(func() {
+		err = app.Stop(true, false)
+		assert.NoError(err)
+		err = os.RemoveAll(app.GetConfigPath("db_snapshots"))
+		assert.NoError(err)
+		_ = os.RemoveAll(filepath.Join(app.AppRoot, "users.sql"))
+		_ = os.RemoveAll(filepath.Join(app.AppRoot, "dbdump.sql"))
+		// Make sure we leave the config.yaml in expected state
+		app.Database.Type = nodeps.MariaDB
+		app.Database.Version = nodeps.MariaDBDefaultVersion
+		err = app.WriteConfig()
+		assert.NoError(err)
+		err = os.Chdir(origDir)
+		assert.NoError(err)
+	})
+
+	for _, dbTypeVersion := range serverVersions {
+		t.Logf("Testing mysql client functionality of %s", dbTypeVersion)
+		parts := strings.Split(dbTypeVersion, ":")
+		dbType := parts[0]
+		dbVersion := parts[1]
+		require.Len(t, parts, 2)
+
+		err = app.Stop(true, false)
+		require.NoError(t, err)
+		app.Database.Type = dbType
+		app.Database.Version = dbVersion
+		err = app.WriteConfig()
+		require.NoError(t, err)
+
+		startErr := app.Start()
+		require.NoError(t, startErr)
+
+		for _, tool := range []string{"mysql", "mysqladmin", "mysqldump"} {
+			cmd := tool + " --version"
+			stdout, stderr, err := app.Exec(&ddevapp.ExecOpts{
+				Cmd: cmd,
+			})
+			require.NoError(t, err, "mysql --version with dbTypeVersion=%s, stdout=%s, stderr=%s", dbTypeVersion, stdout, stderr)
+			parts := strings.Fields(stdout)
+			require.True(t, len(parts) > 5)
+			expectedClientVersion := dbVersion
+
+			// Search for CHANGE_MARIADB_CLIENT to update related code.
+			if dbType == nodeps.MariaDB {
+				// For MariaDB, we have installed the 10.11 client by default.
+				expectedClientVersion = "10.11"
+				// Add MariaDB versions that can have their own client here:
+				if dbVersion == nodeps.MariaDB114 {
+					expectedClientVersion = "11.4"
+				}
+			}
+			// Output might be "mysql  Ver 8.0.36 for Linux on aarch64 (Source distribution)"
+			// Or "mysql  Ver 14.14 Distrib 5.7.44, for Linux (aarch64) using  EditLine wrapper"
+			require.True(t, strings.HasPrefix(parts[4], expectedClientVersion) || strings.HasPrefix(parts[2], expectedClientVersion), "string=%s dbType=%s dbVersion=%s; should have dbVersion as prefix", stdout, dbType, dbVersion)
+		}
+
+		importPath := filepath.Join(origDir, "testdata", t.Name(), dbType, "users.sql")
+		err = fileutil.CopyFile(importPath, filepath.Join(app.AppRoot, "users.sql"))
+		require.NoError(t, err)
+		err = app.MutagenSyncFlush()
+		require.NoError(t, err)
+		stdout, stderr, err := app.Exec(&ddevapp.ExecOpts{
+			Cmd: "mysql db < users.sql",
+		})
+		require.NoError(t, err, "mysql db <users.sql failed: stdout=%s, stderr=%s", stdout, stderr)
+
+		stdout, stderr, err = app.Exec(&ddevapp.ExecOpts{
+			Cmd: "mysqldump -uroot -proot db > dbdump.sql",
+		})
+		require.NoError(t, err, "mysqldump failed, stdout=%s, stderr=%s", stdout, stderr)
+
+		err = app.MutagenSyncFlush()
+		require.NoError(t, err)
+
+		found, err := fileutil.FgrepStringInFile(filepath.Join(app.AppRoot, "dbdump.sql"), `!999999\- enable the sandbox mode`)
+		require.NoError(t, err)
+		if dbType == nodeps.MariaDB {
+			require.True(t, found, "expected sandbox directive not found %s (%s)", dbType, "tmp/users1.sql")
+		}
+		if dbType == nodeps.MySQL {
+			require.False(t, found, "expected sandbox directive found inappropriately in %s (%s)", dbType, "tmp/users1.sql")
+		}
+
+		stdout, stderr, err = app.Exec(&ddevapp.ExecOpts{
+			Cmd: "mysql db < dbdump.sql",
+		})
+		require.NoError(t, err, "mysql db </tmp/users.sql failed: stdout=%s, stderr=%s", stdout, stderr)
+
+		stdout, _, err = app.Exec(&ddevapp.ExecOpts{
+			Cmd: `mysql -B --skip-column-names -e "SELECT COUNT(*) FROM users;"`,
+		})
+		require.NoError(t, err)
+		stdout = strings.Trim(stdout, "\n")
+		require.Equal(t, "2", stdout)
+	}
+	runTime()
+}
+
+// TestWebserverPostgresDBClient tests functionality of Postgres
+// database clients in the ddev-webserver
+func TestWebserverPostgresDBClient(t *testing.T) {
+	assert := asrt.New(t)
+
+	serverVersions := []string{"postgres:16", "postgres:15", "postgres:14", "postgres:9"}
+
+	app := &ddevapp.DdevApp{}
+	origDir, _ := os.Getwd()
+
+	site := TestSites[0]
+	runTime := util.TimeTrackC(fmt.Sprintf("%s %s", site.Name, t.Name()))
+
+	testcommon.ClearDockerEnv()
+	err := app.Init(site.Dir)
+	assert.NoError(err)
+
+	err = app.Stop(true, false)
+	require.NoError(t, err)
+
+	// Existing DB type in volume should be empty
+	dbType, err := app.GetExistingDBType()
+	assert.NoError(err)
+	assert.Equal("", strings.Trim(dbType, " \n\r\t"))
+
+	// Make sure there isn't an old database volume laying around
+	_ = dockerutil.RemoveVolume(app.Name + "-postgres")
+	t.Cleanup(func() {
+		err = app.Stop(true, false)
+		assert.NoError(err)
+		err = os.RemoveAll(app.GetConfigPath("db_snapshots"))
+		assert.NoError(err)
+		_ = os.RemoveAll(filepath.Join(app.AppRoot, "users.sql"))
+		_ = os.RemoveAll(filepath.Join(app.AppRoot, "dbdump.sql"))
+		// Make sure we leave the config.yaml in expected state
+		app.Database.Type = nodeps.MariaDB
+		app.Database.Version = nodeps.MariaDBDefaultVersion
+		err = app.WriteConfig()
+		assert.NoError(err)
+		err = os.Chdir(origDir)
+		assert.NoError(err)
+	})
+
+	for _, dbTypeVersion := range serverVersions {
+		t.Logf("Testing postgres client functionality of %s", dbTypeVersion)
+		parts := strings.Split(dbTypeVersion, ":")
+		dbType := parts[0]
+		dbVersion := parts[1]
+		require.Len(t, parts, 2)
+
+		err = app.Stop(true, false)
+		require.NoError(t, err)
+		app.Database.Type = dbType
+		app.Database.Version = dbVersion
+		err = app.WriteConfig()
+		require.NoError(t, err)
+
+		startErr := app.Start()
+		require.NoError(t, startErr)
+
+		for _, tool := range []string{"psql", "pg_dump", "pg_restore"} {
+			cmd := tool + " --version"
+			stdout, stderr, err := app.Exec(&ddevapp.ExecOpts{
+				Cmd: cmd,
+			})
+			require.NoError(t, err, "%s --version with dbTypeVersion=%s, stdout=%s, stderr=%s", tool, dbTypeVersion, stdout, stderr)
+			parts := strings.Fields(stdout)
+			expectedClientVersion := dbVersion
+			require.True(t, len(parts) >= 3, "parts is %v but expected 3+ parts")
+
+			// Output might be "pg_restore (PostgreSQL) 16.3 (Debian 16.3-1.pgdg120+1)"
+			// Or for postgres 9: "pg_dump (PostgreSQL) 9.6.24"
+			require.True(t, strings.HasPrefix(parts[2], expectedClientVersion), "string=%s dbType=%s dbVersion=%s; should have dbVersion as prefix", stdout, dbType, dbVersion)
+
+		}
+
+		importPath := filepath.Join(origDir, "testdata", t.Name(), dbType, "users.sql")
+		err = fileutil.CopyFile(importPath, filepath.Join(app.AppRoot, "users.sql"))
+		require.NoError(t, err)
+		err = app.MutagenSyncFlush()
+		require.NoError(t, err)
+		stdout, stderr, err := app.Exec(&ddevapp.ExecOpts{
+			Cmd: "psql -d db -f users.sql",
+		})
+		require.NoError(t, err, "psql -d db -f users.sql failed: stdout=%s, stderr=%s", stdout, stderr)
+
+		stdout, stderr, err = app.Exec(&ddevapp.ExecOpts{
+			Cmd: "pg_dump db > dbdump.sql",
+		})
+		require.NoError(t, err, "pg_dump failed, stdout=%s, stderr=%s", stdout, stderr)
+
+		err = app.MutagenSyncFlush()
+		require.NoError(t, err)
+
+		stdout, _, err = app.Exec(&ddevapp.ExecOpts{
+			Cmd: `psql -d db -tA -c "SELECT COUNT(*) FROM users;"`,
+		})
+		require.NoError(t, err)
+		stdout = strings.Trim(stdout, "\n")
+		require.Equal(t, "2", stdout)
+	}
 	runTime()
 }
 
@@ -2054,8 +2326,8 @@ func readLastLine(fileName string) (string, error) {
 // TestDdevFullSiteSetup tests a full import-db and import-files and then looks to see if
 // we have a spot-test success hit on a URL
 func TestDdevFullSiteSetup(t *testing.T) {
-	if runtime.GOOS == "windows" || dockerutil.IsColima() {
-		t.Skip("Skipping on Windows and Colima as this is tested adequately elsewhere")
+	if runtime.GOOS == "windows" || dockerutil.IsColima() || dockerutil.IsLima() {
+		t.Skip("Skipping on Windows/Lima/Colima as this is tested adequately elsewhere")
 	}
 	assert := asrt.New(t)
 	app := &ddevapp.DdevApp{}
@@ -2180,6 +2452,19 @@ func TestDdevFullSiteSetup(t *testing.T) {
 			err = app.ImportFiles("", tarballPath, "")
 			assert.Error(err)
 			assert.Contains(err.Error(), "upload_dirs is not set", app.Type)
+		}
+
+		// Special installed sqlite3 test for drupal11.
+		if app.Type == nodeps.AppTypeDrupal {
+			drupalVersion, err := ddevapp.GetDrupalVersion(app)
+			if err == nil && drupalVersion == "11" {
+				stdout, stderr, err := app.Exec(&ddevapp.ExecOpts{
+					Cmd: "sqlite3 --version | awk '{print $1}'",
+				})
+				require.NoError(t, err, "sqlite3 --version failed, output=%v, stderr=%v", stdout, stderr)
+				stdout = strings.Trim(stdout, "\r\n")
+				require.Equal(t, versionconstants.Drupal11RequiredSqlite3Version, stdout)
+			}
 		}
 		// We don't want all the projects running at once.
 		err = app.Stop(true, false)
@@ -2410,6 +2695,9 @@ func TestDdevImportFiles(t *testing.T) {
 
 		app.Hooks = map[string][]ddevapp.YAMLTask{"post-import-files": {{"exec-host": "touch hello-post-import-files-" + app.Name}}, "pre-import-files": {{"exec-host": "touch hello-pre-import-files-" + app.Name}}}
 
+		err = app.Start()
+		require.NoError(t, err)
+
 		if site.FilesTarballURL != "" && app.GetUploadDir() != "" {
 			_, tarballPath, err := testcommon.GetCachedArchive(site.Name, "local-tarballs-files", "", site.FilesTarballURL)
 			assert.NoError(err)
@@ -2456,6 +2744,12 @@ func TestDdevImportFiles(t *testing.T) {
 					continue
 				}
 				assert.FileExists(filepath.Join(app.GetHostUploadDirFullPath(), ext+".txt"))
+
+				// Make sure the imported file also appears inside the container
+				stdout, stderr, err := app.Exec(&ddevapp.ExecOpts{
+					Cmd: fmt.Sprintf("file %s", app.GetContainerUploadDir()),
+				})
+				require.NoError(t, err, "Expected file not found inside container, err='%v', stdout='%s', stderr='%s'", err, stdout, stderr)
 			}
 			assert.FileExists("hello-pre-import-files-" + app.Name)
 			assert.FileExists("hello-post-import-files-" + app.Name)
@@ -2479,9 +2773,7 @@ func TestDdevUploadDirNoPackage(t *testing.T) {
 		nodeps.AppTypeCraftCms:     {"files"},
 		nodeps.AppTypeDrupal6:      {"sites/default/files"},
 		nodeps.AppTypeDrupal7:      {"sites/default/files"},
-		nodeps.AppTypeDrupal8:      {"sites/default/files"},
-		nodeps.AppTypeDrupal9:      {"sites/default/files"},
-		nodeps.AppTypeDrupal10:     {"sites/default/files"},
+		nodeps.AppTypeDrupal:       {"sites/default/files"},
 		nodeps.AppTypeShopware6:    {"media"},
 		nodeps.AppTypeBackdrop:     {"files"},
 		nodeps.AppTypeTYPO3:        {"fileadmin"},
@@ -2664,8 +2956,7 @@ func TestDdevExec(t *testing.T) {
 		assert.NoError(err)
 		err = app.WriteConfig()
 		assert.NoError(err)
-		err = os.RemoveAll(filepath.Join(site.Dir, ".ddev", "docker-compose.busybox.yaml"))
-		assert.NoError(err)
+		_ = os.RemoveAll(filepath.Join(site.Dir, ".ddev", "docker-compose.busybox.yaml"))
 	})
 
 	app.Hooks = map[string][]ddevapp.YAMLTask{"post-exec": {{"exec-host": "touch hello-post-exec-" + app.Name}}, "pre-exec": {{"exec-host": "touch hello-pre-exec-" + app.Name}}}
@@ -2747,11 +3038,12 @@ func TestDdevExec(t *testing.T) {
 	assert.Contains(stderr, "this: not found")
 
 	// Now kill the busybox service and make sure that responses to app.Exec are correct
-	client := dockerutil.GetDockerClient()
+	ctx, client := dockerutil.GetDockerClient()
 	bbc, err := dockerutil.FindContainerByName(fmt.Sprintf("ddev-%s-%s", app.Name, "busybox"))
 	require.NoError(t, err)
 	require.NotEmpty(t, bbc)
-	err = client.StopContainer(bbc.ID, 2)
+	timeout := 2
+	err = client.ContainerStop(ctx, bbc.ID, dockerContainer.StopOptions{Timeout: &timeout})
 	assert.NoError(err)
 
 	simpleOpts := ddevapp.ExecOpts{
@@ -2762,7 +3054,7 @@ func TestDdevExec(t *testing.T) {
 	require.Error(t, err, "stdout='%s', stderr='%s'", stdout, stderr)
 	require.True(t, strings.Contains(err.Error(), "not currently running") || strings.Contains(err.Error(), "is not running") || strings.Contains(err.Error(), "state=exited"), "stdout='%s', stderr='%s'", stdout, stderr)
 
-	err = client.RemoveContainer(docker.RemoveContainerOptions{ID: bbc.ID, Force: true})
+	err = client.ContainerRemove(ctx, bbc.ID, dockerContainer.RemoveOptions{Force: true})
 	assert.NoError(err)
 	_, _, err = app.Exec(&simpleOpts)
 	assert.Error(err)
@@ -2835,51 +3127,6 @@ func TestDdevLogs(t *testing.T) {
 	switchDir()
 }
 
-// TestDdevStopMissingDirectory tests that the 'ddev stop' command works properly on sites with missing directories or DDEV configs.
-func TestDdevStopMissingDirectory(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Skipping because unreliable on Windows")
-	}
-
-	assert := asrt.New(t)
-
-	site := TestSites[0]
-	testcommon.ClearDockerEnv()
-	app := &ddevapp.DdevApp{}
-	err := app.Init(site.Dir)
-	assert.NoError(err)
-
-	startErr := app.StartAndWait(0)
-	//nolint: errcheck
-	defer app.Stop(true, false)
-	if startErr != nil {
-		logs, health, err := ddevapp.GetErrLogsFromApp(app, startErr)
-		assert.NoError(err)
-		t.Fatalf("app.StartAndWait failed err=%v health=\n%s\n\nlogs from broken container: \n=======\n%s\n========\n", startErr, health, logs)
-	}
-
-	tempPath := testcommon.CreateTmpDir("site-copy")
-	siteCopyDest := filepath.Join(tempPath, "site")
-	defer removeAllErrCheck(tempPath, assert)
-
-	_ = app.Stop(false, false)
-
-	// Move the site directory to a temp location to mimic a missing directory.
-	err = os.Rename(site.Dir, siteCopyDest)
-	assert.NoError(err)
-
-	//nolint: errcheck
-	defer os.Rename(siteCopyDest, site.Dir)
-
-	// ddev stop (in cmd) actually does the check for missing project files,
-	// so we imitate that here.
-	err = ddevapp.CheckForMissingProjectFiles(app)
-	assert.Error(err)
-	if err != nil {
-		assert.Contains(err.Error(), "If you would like to continue using DDEV to manage this project please restore your files to that directory.")
-	}
-}
-
 // TestDdevDescribe tests that the describe command works properly on a running
 // and also a stopped project.
 func TestDdevDescribe(t *testing.T) {
@@ -2937,44 +3184,6 @@ func TestDdevDescribe(t *testing.T) {
 	assert.NoError(err)
 }
 
-// TestDdevDescribeMissingDirectory tests that the describe command works properly on sites with missing directories or DDEV configs.
-func TestDdevDescribeMissingDirectory(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Skipping because unreliable on Windows")
-	}
-
-	assert := asrt.New(t)
-	site := TestSites[0]
-	tempPath := testcommon.CreateTmpDir("site-copy")
-	siteCopyDest := filepath.Join(tempPath, "site")
-	defer removeAllErrCheck(tempPath, assert)
-
-	app := &ddevapp.DdevApp{}
-	err := app.Init(site.Dir)
-	assert.NoError(err)
-	startErr := app.StartAndWait(0)
-	//nolint: errcheck
-	defer app.Stop(true, false)
-	if startErr != nil {
-		logs, health, err := ddevapp.GetErrLogsFromApp(app, startErr)
-		assert.NoError(err)
-		t.Fatalf("app.StartAndWait failed err=%v health:\n%s\nlogs from broken container: \n=======\n%s\n========\n", startErr, health, logs)
-	}
-	// Move the site directory to a temp location to mimic a missing directory.
-	err = app.Stop(false, false)
-	assert.NoError(err)
-	err = os.Rename(site.Dir, siteCopyDest)
-	assert.NoError(err)
-
-	desc, err := app.Describe(false)
-	assert.NoError(err)
-	assert.Equal(ddevapp.SiteDirMissing, desc["status"])
-	assert.Contains(desc["status_desc"], ddevapp.SiteDirMissing, "Status did not include the phrase '%s' when describing a site with missing directories.", ddevapp.SiteDirMissing)
-	// Move the site directory back to its original location.
-	err = os.Rename(siteCopyDest, site.Dir)
-	assert.NoError(err)
-}
-
 // TestRouterPortsCheck makes sure that we can detect if the ports are available before starting the router.
 func TestRouterPortsCheck(t *testing.T) {
 	assert := asrt.New(t)
@@ -3015,9 +3224,7 @@ func TestRouterPortsCheck(t *testing.T) {
 	}
 
 	app, err = ddevapp.GetActiveApp(site.Name)
-	if err != nil {
-		t.Fatalf("Failed to GetActiveApp(%s), err:%v", site.Name, err)
-	}
+	require.NoError(t, err, "Failed to GetActiveApp(%s), err:%v", site.Name, err)
 	startErr = app.StartAndWait(5)
 	//nolint: errcheck
 	defer app.Stop(true, false)
@@ -3041,14 +3248,14 @@ func TestRouterPortsCheck(t *testing.T) {
 	// This is done with Docker so that we don't have to use explicit sudo
 	// The ddev-webserver healthcheck should make sure that we have a legitimate occupation
 	// of the port by the time it comes up.
-	portBinding := map[docker.Port][]docker.PortBinding{
+	portBinding := map[nat.Port][]nat.PortBinding{
 		"80/tcp": {
 			{HostPort: "80"},
 			{HostPort: "443"},
 		},
 	}
 
-	containerID, out, err := dockerutil.RunSimpleContainer(dockerImages.GetWebImage(), t.Name()+"occupyport", nil, []string{}, []string{}, []string{"testnfsmount" + ":/nfsmount"}, "", false, true, map[string]string{"ddevtestcontainer": t.Name()}, portBinding)
+	containerID, out, err := dockerutil.RunSimpleContainer(ddevImages.GetWebImage(), t.Name()+"occupyport", nil, []string{}, []string{}, nil, "", false, true, map[string]string{"ddevtestcontainer": t.Name()}, portBinding, nil)
 
 	if err != nil {
 		t.Fatalf("Failed to run Docker command to occupy port 80/443, err=%v output=%v", err, out)
@@ -3104,8 +3311,7 @@ func TestCleanupWithoutCompose(t *testing.T) {
 		// Move the site directory back to its original location.
 		err = os.Rename(siteCopyDest, site.Dir)
 		assert.NoError(err)
-		err = os.RemoveAll(tempPath)
-		assert.NoError(err)
+		_ = os.RemoveAll(tempPath)
 	})
 
 	// Call the Stop command()
@@ -3114,17 +3320,17 @@ func TestCleanupWithoutCompose(t *testing.T) {
 	// by ensuring any associated database files get cleaned up as well.
 	err = app.Stop(true, false)
 	assert.NoError(err)
-	assert.Empty(globalconfig.DdevGlobalConfig.ProjectList[app.Name])
+	assert.Empty(globalconfig.DdevProjectList[app.Name])
 	for _, containerType := range []string{"web", "db"} {
 		_, err := constructContainerName(containerType, app)
 		assert.Error(err)
 	}
 
 	// Ensure there are no volumes associated with this project
-	client := dockerutil.GetDockerClient()
-	volumes, err := client.ListVolumes(docker.ListVolumesOptions{})
+	ctx, client := dockerutil.GetDockerClient()
+	volumes, err := client.VolumeList(ctx, dockerVolume.ListOptions{})
 	assert.NoError(err)
-	for _, volume := range volumes {
+	for _, volume := range volumes.Volumes {
 		assert.False(volume.Labels["com.docker.compose.project"] == "ddev"+strings.ToLower(app.GetName()))
 	}
 
@@ -3193,8 +3399,7 @@ func TestAppdirAlreadyInUse(t *testing.T) {
 		_ = app.Stop(true, false)
 		err = os.Chdir(origDir)
 		assert.NoError(err)
-		err = os.RemoveAll(testDir)
-		assert.NoError(err)
+		_ = os.RemoveAll(testDir)
 	})
 
 	// Write/create global with the name "originalproject"
@@ -3210,7 +3415,7 @@ func TestAppdirAlreadyInUse(t *testing.T) {
 
 	err = app.Start()
 	assert.Error(err)
-	assert.Contains(err.Error(), "already contains a project named "+originalProjectName)
+	assert.Contains(err.Error(), "already contains a project named '"+originalProjectName)
 	err = app.Stop(true, false)
 	assert.NoError(err)
 
@@ -3229,7 +3434,7 @@ func TestAppdirAlreadyInUse(t *testing.T) {
 	app.Name = secondProjectName
 	err = app.Start()
 	assert.Error(err)
-	assert.Contains(err.Error(), "already contains a project named "+originalProjectName)
+	assert.Contains(err.Error(), "already contains a project named '"+originalProjectName)
 }
 
 // TestHttpsRedirection tests to make sure that webserver and php redirect to correct
@@ -3275,10 +3480,10 @@ func TestHttpsRedirection(t *testing.T) {
 		{"http", "/redir_relative.php", "/landed.php"},
 	}
 
-	types := ddevapp.GetValidAppTypes()
+	types := ddevapp.GetValidAppTypesWithoutAliases()
 	webserverTypes := []string{nodeps.WebserverNginxFPM, nodeps.WebserverApacheFPM}
 	if os.Getenv("GOTEST_SHORT") != "" {
-		types = []string{nodeps.AppTypePHP, nodeps.AppTypeDrupal10}
+		types = []string{nodeps.AppTypePHP, nodeps.AppTypeDrupal}
 		webserverTypes = []string{nodeps.WebserverNginxFPM, nodeps.WebserverApacheFPM}
 	}
 	for _, projectType := range types {
@@ -3543,8 +3748,8 @@ func TestPHPWebserverType(t *testing.T) {
 // TestInternalAndExternalAccessToURL checks we can access content
 // from host and from inside container by URL (with port)
 func TestInternalAndExternalAccessToURL(t *testing.T) {
-	if nodeps.IsAppleSilicon() || dockerutil.IsColima() {
-		t.Skip("Skipping on mac M1/Colima to ignore problems with 'connection reset by peer'")
+	if nodeps.IsAppleSilicon() || dockerutil.IsColima() || dockerutil.IsLima() {
+		t.Skip("Skipping on mac Apple Silicon/Lima/Colima to ignore problems with 'connection reset by peer'")
 	}
 
 	assert := asrt.New(t)
@@ -3675,8 +3880,8 @@ func TestCaptureLogs(t *testing.T) {
 // This requires that the test machine must have NFS shares working
 // Tests using both app-specific performance_mode: nfs and etc
 func TestNFSMount(t *testing.T) {
-	if nodeps.IsWSL2() || dockerutil.IsColima() {
-		t.Skip("Skipping on WSL2/Colima")
+	if nodeps.IsWSL2() || dockerutil.IsColima() || dockerutil.IsLima() || dockerutil.IsOrbstack() {
+		t.Skip("Skipping on WSL2/Lima/Colima")
 	}
 	if nodeps.PerformanceModeDefault == types.PerformanceModeMutagen || nodeps.NoBindMountsDefault {
 		t.Skip("Skipping because mutagen/nobindmounts enabled")
@@ -3817,8 +4022,8 @@ func verifyNFSMount(t *testing.T, app *ddevapp.DdevApp) {
 
 // TestHostDBPort tests to make sure that the host_db_port specification has the intended effect
 func TestHostDBPort(t *testing.T) {
-	if dockerutil.IsColima() {
-		t.Skip("Skipping test on Colima because of constant port problems")
+	if dockerutil.IsColima() || dockerutil.IsLima() {
+		t.Skip("Skipping test on Lima/Colima because of constant port problems")
 	}
 	assert := asrt.New(t)
 	defer util.TimeTrackC(t.Name())()
@@ -3847,8 +4052,7 @@ func TestHostDBPort(t *testing.T) {
 		app.Database.Version = nodeps.MariaDBDefaultVersion
 		err = app.WriteConfig()
 		assert.NoError(err)
-		err = os.RemoveAll(showportPath)
-		assert.NoError(err)
+		_ = os.RemoveAll(showportPath)
 	})
 	clientTool := ""
 
@@ -3937,7 +4141,7 @@ func TestPortSpecifications(t *testing.T) {
 	err = globalconfig.ReadGlobalConfig()
 	require.NoError(t, err)
 	// Since host ports were not explicitly set in nospecApp, they shouldn't be in globalconfig.
-	require.Empty(t, globalconfig.DdevGlobalConfig.ProjectList[nospecApp.Name].UsedHostPorts)
+	require.Empty(t, globalconfig.DdevProjectList[nospecApp.Name].UsedHostPorts)
 
 	err = nospecApp.Start()
 	assert.NoError(err)
@@ -3958,8 +4162,7 @@ func TestPortSpecifications(t *testing.T) {
 
 	t.Cleanup(func() {
 		_ = specAPP.Stop(true, false)
-		err = os.RemoveAll(specAppPath)
-		assert.NoError(err)
+		_ = os.RemoveAll(specAppPath)
 	})
 
 	// It should be able to WriteConfig and Start with the configured host ports it came up with
@@ -3971,8 +4174,8 @@ func TestPortSpecifications(t *testing.T) {
 	err = specAPP.Stop(false, false)
 	require.NoError(t, err)
 	// Verify that DdevGlobalConfig got updated properly
-	require.NotEmpty(t, globalconfig.DdevGlobalConfig.ProjectList[specAPP.Name])
-	require.NotEmpty(t, globalconfig.DdevGlobalConfig.ProjectList[specAPP.Name].UsedHostPorts)
+	require.NotEmpty(t, globalconfig.DdevProjectList[specAPP.Name])
+	require.NotEmpty(t, globalconfig.DdevProjectList[specAPP.Name].UsedHostPorts)
 
 	// However, if we change change the name to make it appear to be a
 	// different project, we should not be able to config or start
@@ -3992,27 +4195,64 @@ func TestPortSpecifications(t *testing.T) {
 	// Now delete the specAPP and we should be able to use the conflictApp
 	err = specAPP.Stop(true, false)
 	assert.NoError(err)
-	assert.Empty(globalconfig.DdevGlobalConfig.ProjectList[specAPP.Name])
+	assert.Empty(globalconfig.DdevProjectList[specAPP.Name])
 
 	err = conflictApp.WriteConfig()
 	assert.NoError(err)
 	err = conflictApp.Start()
 	assert.NoError(err)
 
-	require.NotEmpty(t, globalconfig.DdevGlobalConfig.ProjectList[conflictApp.Name])
-	require.NotEmpty(t, globalconfig.DdevGlobalConfig.ProjectList[conflictApp.Name].UsedHostPorts)
+	require.NotEmpty(t, globalconfig.DdevProjectList[conflictApp.Name])
+	require.NotEmpty(t, globalconfig.DdevProjectList[conflictApp.Name].UsedHostPorts)
 }
 
-// TestDdevGetProjects exercises GetProjects()
+// TestGetProjects exercises GetProjects()
 // It's only here for profiling at this point
-func TestDdevGetProjects(t *testing.T) {
+func TestGetProjects(t *testing.T) {
 	assert := asrt.New(t)
 	defer util.TimeTrackC(t.Name())()
 
 	apps, err := ddevapp.GetProjects(false)
 	assert.NoError(err)
 	_ = apps
+}
 
+// TestGetProjectsMissingApp exercises GetProjects() with a missing project from filesystem
+func TestGetProjectsMissingApp(t *testing.T) {
+	tmpDir := testcommon.CreateTmpDir(t.Name())
+	badApp, err := ddevapp.NewApp(tmpDir, false)
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		_ = badApp.Stop(true, false)
+		_ = os.RemoveAll(tmpDir)
+	})
+
+	err = badApp.WriteConfig()
+	require.NoError(t, err)
+	// This would normally have been done early in root.go's init()
+	// but we can do it early here. sshfs is pretty slow
+	// so colima with sshfs or rancher desktop with sshfs might fail
+	// on /mnt/ddev_config
+	err = ddevapp.PopulateExamplesCommandsHomeadditions(badApp.Name)
+	require.NoError(t, err)
+
+	err = badApp.Start()
+	require.NoError(t, err)
+	// Make sure the new badApp is listed
+	l, err := ddevapp.GetProjects(false)
+	require.NoError(t, err)
+	m := ddevapp.AppSliceToMap(l)
+	require.NotEmptyf(t, m[badApp.Name], "app not found when it should be")
+	// Remove the badApp from the filesystem and verify
+	// that it is no longer listed
+	err = badApp.Stop(false, false)
+	require.NoError(t, err)
+	_ = os.RemoveAll(badApp.AppRoot)
+	l, err = ddevapp.GetProjects(false)
+	require.NoError(t, err)
+	m = ddevapp.AppSliceToMap(l)
+	require.Emptyf(t, m[badApp.Name], "map should no longer have badapp")
 }
 
 // TestCustomCerts makes sure that added custom certificates are respected and used

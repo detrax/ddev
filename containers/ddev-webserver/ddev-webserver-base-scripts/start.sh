@@ -28,9 +28,9 @@ DDEV_WEBSERVER_TYPE="${DDEV_WEBSERVER_TYPE:-nginx-fpm}"
 # Update the default PHP and FPM versions a DDEV_PHP_VERSION like '5.6' or '7.0' is provided
 # Otherwise it will use the default version configured in the Dockerfile
 if [ -n "$DDEV_PHP_VERSION" ] ; then
-	update-alternatives --set php /usr/bin/php${DDEV_PHP_VERSION}
-	ln -sf /usr/sbin/php-fpm${DDEV_PHP_VERSION} /usr/sbin/php-fpm
-	export PHP_INI=/etc/php/${DDEV_PHP_VERSION}/fpm/php.ini
+  update-alternatives --set php /usr/bin/php${DDEV_PHP_VERSION}
+  ln -sf /usr/sbin/php-fpm${DDEV_PHP_VERSION} /usr/sbin/php-fpm
+  export PHP_INI=/etc/php/${DDEV_PHP_VERSION}/fpm/php.ini
 fi
 
 # Set PHP timezone to configured $TZ if there is one
@@ -93,19 +93,26 @@ ls /var/www/html >/dev/null || (echo "/var/www/html does not seem to be healthy/
 # Make sure the TERMINUS_CACHE_DIR (/mnt/ddev-global-cache/terminus/cache) exists
 sudo mkdir -p ${TERMINUS_CACHE_DIR}
 
-sudo mkdir -p /mnt/ddev-global-cache/{bashhistory/${HOSTNAME},mysqlhistory/${HOSTNAME},nvm_dir/${HOSTNAME},npm,yarn/classic,yarn/berry}
+sudo mkdir -p /mnt/ddev-global-cache/{bashhistory/${HOSTNAME},mysqlhistory/${HOSTNAME},n_prefix/${HOSTNAME},nvm_dir/${HOSTNAME},npm,yarn/classic,yarn/berry,corepack}
 sudo chown -R "$(id -u):$(id -g)" /mnt/ddev-global-cache/ /var/lib/php
+
+if [ "${N_PREFIX:-}" != "" ] && [ "${N_INSTALL_VERSION:-}" != "" ]; then
+  n-install.sh || true
+fi
+
 # The following ensures a persistent and shared "global" cache for
-# yarn1 (classic) and yarn2 (berry). In the case of yarn2, the global cache
+# yarn classic (frozen v1) and yarn berry (active). In the case of berry, the global cache
 # will only be used if the project is configured to use it through it's own
 # enableGlobalCache configuration option. Assumes ~/.yarn/berry as the default
 # global folder.
-( (cd ~ || echo "unable to cd to home directory"; exit 22) && yarn config set cache-folder /mnt/ddev-global-cache/yarn/classic || true)
-# ensure default yarn2 global folder is there to symlink cache afterwards
+(if cd ~ || (echo "unable to cd to home directory"; exit 22); then
+  yarn config set cache-folder /mnt/ddev-global-cache/yarn/classic >/dev/null || true
+fi)
+# ensure default yarn berry global folder is there to symlink cache afterwards
 mkdir -p ~/.yarn/berry
 ln -sf /mnt/ddev-global-cache/yarn/berry ~/.yarn/berry/cache
 ln -sf /mnt/ddev-global-cache/nvm_dir/${HOSTNAME} ~/.nvm
-if [ ! -f ~/.nvm/nvm.sh ]; then (install_nvm.sh || true); fi
+if [ ! -f ~/.nvm/nvm.sh ]; then (timeout 30 install_nvm.sh || true); fi
 
 # /mnt/ddev_config/.homeadditions may be either
 # a bind-mount, or a volume mount, but we don't care,
@@ -116,9 +123,6 @@ if [ -d /mnt/ddev_config/.homeadditions ]; then
 fi
 
 # It's possible CAROOT does not exist or is not writeable (if host-side mkcert -install not run yet)
-# TODO: We shouldn't have to chown ddev-global-cache here as it's done by app.Start. However, in non-ddev
-# context it may still have to be done.
-sudo mkdir -p ${CAROOT} && sudo chown -R "$(id -u):$(id -g)" /mnt/ddev-global-cache/
 # This will install the certs from $CAROOT (/mnt/ddev-global-cache/mkcert)
 # It also creates them if they don't already exist
 if [ ! -f  "${CAROOT}/rootCA.pem" ]; then

@@ -52,7 +52,7 @@ To get the latest changes use:
 composer require openmage/magento-lts":"dev-main"
 ```
 
-<small>Note: `dev-main` is just an alias for current `1.9.4.x` branch and may change</small>
+<small>Note: `dev-main` is an alias for current `1.9.4.x` branch and may change</small>
 
 ### Using Git
 
@@ -131,7 +131,7 @@ for more information.
 
 ## Public Communication
 
-* [Discord](https://discord.gg/EV8aNbU) (maintained by Flyingmana)
+* [Discord](https://discord.gg/5wjP76mBJD) (maintained by Flyingmana)
 
 ## Maintainers
 

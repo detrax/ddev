@@ -4,7 +4,6 @@ import (
 	"github.com/ddev/ddev/pkg/dockerutil"
 	"github.com/ddev/ddev/pkg/util"
 	"github.com/ddev/ddev/pkg/versionconstants"
-	"github.com/fsouza/go-dockerclient"
 )
 
 func PowerOff() {
@@ -15,7 +14,7 @@ func PowerOff() {
 
 	// Remove any custom certs that may have been added
 	// along with all Traefik configuration.
-	_, _, err = dockerutil.RunSimpleContainer(versionconstants.BusyboxImage, "poweroff-"+util.RandString(6), []string{"sh", "-c", "rm -rf /mnt/ddev-global-cache/custom_certs/* /mnt/ddev-global-cache/traefik/*"}, []string{}, []string{}, []string{"ddev-global-cache" + ":/mnt/ddev-global-cache"}, "", true, false, map[string]string{"com.ddev.site-name": ""}, nil)
+	_, _, err = dockerutil.RunSimpleContainer(versionconstants.BusyboxImage, "poweroff-"+util.RandString(6), []string{"sh", "-c", "rm -rf /mnt/ddev-global-cache/custom_certs/* /mnt/ddev-global-cache/traefik/*"}, []string{}, []string{}, []string{"ddev-global-cache" + ":/mnt/ddev-global-cache"}, "", true, false, map[string]string{"com.ddev.site-name": ""}, nil, &dockerutil.NoHealthCheck)
 	if err != nil {
 		util.Warning("Failed removing custom certs/traefik configuration: %v", err)
 	}
@@ -29,11 +28,8 @@ func PowerOff() {
 	}
 
 	// Any straggling containers that have label "com.ddev.site-name" should be removed.
-	client := dockerutil.GetDockerClient()
-	containers, err := client.ListContainers(docker.ListContainersOptions{
-		All:     true,
-		Filters: map[string][]string{"label": {"com.ddev.site-name"}},
-	})
+	containers, err := dockerutil.FindContainersByLabels(map[string]string{"com.ddev.site-name": ""})
+
 	if err == nil {
 		for _, c := range containers {
 			err = dockerutil.RemoveContainer(c.ID)
@@ -45,13 +41,16 @@ func PowerOff() {
 		util.Warning("Unable to run client.ListContainers(): %v", err)
 	}
 
-	StopMutagenDaemon()
+	StopMutagenDaemon("")
 
 	if err := RemoveSSHAgentContainer(); err != nil {
 		util.Error("Failed to remove ddev-ssh-agent: %v", err)
 	}
 
-	// Remove all global networks created with DDEV
+	// Remove global DDEV default network
+	dockerutil.RemoveNetworkWithWarningOnError(dockerutil.NetName)
+
+	// Remove all networks created with DDEV
 	removals, err := dockerutil.FindNetworksWithLabel("com.ddev.platform")
 	if err == nil {
 		for _, network := range removals {
@@ -60,7 +59,4 @@ func PowerOff() {
 	} else {
 		util.Warning("Unable to run dockerutil.FindNetworksWithLabel(): %v", err)
 	}
-
-	// Remove old network from DDEV before v1.22.4
-	dockerutil.RemoveNetworkWithWarningOnError(dockerutil.NetName)
 }

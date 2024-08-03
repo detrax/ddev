@@ -10,6 +10,7 @@ import (
 	"github.com/ddev/ddev/pkg/fileutil"
 	"github.com/ddev/ddev/pkg/nodeps"
 	"github.com/ddev/ddev/pkg/util"
+	copy2 "github.com/otiai10/copy"
 )
 
 // isCraftCmsApp returns true if the app is of type craftcms
@@ -27,13 +28,13 @@ func craftCmsImportFilesAction(app *DdevApp, uploadDir, importPath, extPath stri
 	}
 
 	// parent of destination dir should be writable.
-	if err := os.Chmod(filepath.Dir(destPath), 0755); err != nil {
+	if err := util.Chmod(filepath.Dir(destPath), 0755); err != nil {
 		return err
 	}
 
-	// If the destination path exists, remove it as was warned
+	// If the destination path exists, purge it as was warned
 	if fileutil.FileExists(destPath) {
-		if err := os.RemoveAll(destPath); err != nil {
+		if err := fileutil.PurgeDirectory(destPath); err != nil {
 			return fmt.Errorf("failed to cleanup %s before import: %v", destPath, err)
 		}
 	}
@@ -54,8 +55,7 @@ func craftCmsImportFilesAction(app *DdevApp, uploadDir, importPath, extPath stri
 		return nil
 	}
 
-	//nolint: revive
-	if err := fileutil.CopyDir(importPath, destPath); err != nil {
+	if err := copy2.Copy(importPath, destPath); err != nil {
 		return err
 	}
 
@@ -134,11 +134,10 @@ func craftCmsPostStartAction(app *DdevApp) error {
 			"CRAFT_DB_DATABASE":     "db",
 			"CRAFT_DB_USER":         "db",
 			"CRAFT_DB_PASSWORD":     "db",
-			"CRAFT_WEB_URL":         app.GetPrimaryURL(),
 			"CRAFT_WEB_ROOT":        app.GetAbsDocroot(true),
 			"MAILPIT_SMTP_HOSTNAME": "127.0.0.1",
 			"MAILPIT_SMTP_PORT":     "1025",
-			"PRIMARY_SITE_URL":      app.GetPrimaryURL(), // for backward compatibility only
+			"PRIMARY_SITE_URL":      app.GetPrimaryURL(),
 		}
 	}
 
@@ -147,24 +146,10 @@ func craftCmsPostStartAction(app *DdevApp) error {
 		return err
 	}
 
-	// If composer.json.default exists, rename it to composer.json
-	composerDefaultFilePath := filepath.Join(app.AppRoot, app.ComposerRoot, "composer.json.default")
-	if fileutil.FileExists(composerDefaultFilePath) {
-		composerFilePath := filepath.Join(app.AppRoot, app.ComposerRoot, "composer.json")
-		util.Warning("Renaming composer.json.default to composer.json")
-		err = os.Rename(composerDefaultFilePath, composerFilePath)
-		if err != nil {
-			util.Error("Error renaming composer.json.default to composer.json")
-
-			return err
-		}
-	}
-
 	return nil
 }
 
 func craftCmsConfigOverrideAction(app *DdevApp) error {
-	app.PHPVersion = nodeps.PHP81
 	app.Database = DatabaseDesc{nodeps.MySQL, nodeps.MySQL80}
 	return nil
 }

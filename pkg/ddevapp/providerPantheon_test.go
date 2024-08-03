@@ -70,8 +70,7 @@ func TestPantheonPull(t *testing.T) {
 		assert.NoError(err)
 
 		_ = os.Chdir(origDir)
-		err = os.RemoveAll(siteDir)
-		assert.NoError(err)
+		_ = os.RemoveAll(siteDir)
 	})
 
 	app.Name = t.Name()
@@ -147,8 +146,8 @@ func TestPantheonPush(t *testing.T) {
 	err := globalconfig.WriteGlobalConfig(globalconfig.DdevGlobalConfig)
 	assert.NoError(err)
 
-	// Use a D9 codebase for Drush to work right
-	d9code := FullTestSites[8]
+	// Use a D10 codebase for Drush to work right
+	d9code := FullTestSites[12]
 	d9code.Name = t.Name()
 	err = globalconfig.RemoveProjectInfo(t.Name())
 	require.NoError(t, err)
@@ -176,7 +175,8 @@ func TestPantheonPush(t *testing.T) {
 	})
 
 	app.Name = t.Name()
-	app.Type = nodeps.AppTypeDrupal9
+	app.Type = nodeps.AppTypeDrupal
+	app.PHPVersion = nodeps.PHP82
 	app.Hooks = map[string][]ddevapp.YAMLTask{"post-push": {{"exec-host": "touch hello-post-push-" + app.Name}}, "pre-push": {{"exec-host": "touch hello-pre-push-" + app.Name}}}
 	_ = app.Stop(true, false)
 
@@ -217,10 +217,10 @@ func TestPantheonPush(t *testing.T) {
 	require.NoError(t, err)
 
 	// Make sure we have Drush
-	_, _, err = app.Exec(&ddevapp.ExecOpts{
-		Cmd: "composer require --no-interaction drush/drush:* >/dev/null 2>/dev/null",
+	stdout, stderr, err := app.Exec(&ddevapp.ExecOpts{
+		Cmd: "composer require --no-interaction drush/drush >/dev/null 2>/dev/null",
 	})
-	require.NoError(t, err)
+	require.NoError(t, err, "failed to composer require drush err=%v stdout='%s', stderr='%s'", err, stdout, stderr)
 	err = app.MutagenSyncFlush()
 	assert.NoError(err)
 

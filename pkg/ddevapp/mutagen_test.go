@@ -114,7 +114,7 @@ func TestMutagenSimple(t *testing.T) {
 	assert.Equal("paused", status, "wrong status: status=%s short=%s, long=%s", status, short, long)
 
 	// Make sure we can stop the daemon
-	ddevapp.StopMutagenDaemon()
+	ddevapp.StopMutagenDaemon("")
 	if runtime.GOOS == "darwin" || runtime.GOOS == "linux" {
 		// Verify that the Mutagen daemon stopped/died
 		sleepWait := time.Second * 1
@@ -126,9 +126,8 @@ func TestMutagenSimple(t *testing.T) {
 		assert.Error(err)
 	}
 
-	mutagenDataDirectory := os.Getenv("MUTAGEN_DATA_DIRECTORY")
 	out, err := exec.RunHostCommand(globalconfig.GetMutagenPath(), "sync", "list")
-	assert.NoError(err, "Mutagen sync list failed with MUTAGEN_DATA_DIRECTORY=%s: out=%s: %v", mutagenDataDirectory, out, err)
+	assert.NoError(err, "Mutagen sync list failed with MUTAGEN_DATA_DIRECTORY=%s: out=%s: %v", globalconfig.GetMutagenDataDirectory(), out, err)
 	assert.Contains(out, "Started Mutagen daemon in background")
 	if !strings.Contains(out, "Started Mutagen daemon in background") && (runtime.GOOS == "darwin" || runtime.GOOS == "linux") {
 		out, err := exec.RunHostCommand("bash", "-c", "ps -ef | grep mutagen")
@@ -150,6 +149,26 @@ func TestMutagenSimple(t *testing.T) {
 	status, short, long, err = app.MutagenStatus()
 	assert.NoError(err, "Could not run Mutagen sync list: status=%s short=%s, long=%s, err=%v", status, short, long, err)
 	assert.Equal("ok", status, "wrong status: status=%s short=%s, long=%s", status, short, long)
+
+	err = app.Stop(false, false)
+	require.NoError(t, err)
+
+	// Remove the mutagen-agents.tar.gz file if it exists and start the app
+	if fileutil.FileExists(filepath.Join(globalconfig.GetDDEVBinDir(), "mutagen-agents.tar.gz")) {
+		err = os.Remove(filepath.Join(globalconfig.GetDDEVBinDir(), "mutagen-agents.tar.gz"))
+		require.NoError(t, err)
+	}
+	err = app.Start()
+	require.NoError(t, err)
+	// Verify that the mutagen-agents.tar.gz file was downloaded
+	assert.FileExists(filepath.Join(globalconfig.GetDDEVBinDir(), "mutagen-agents.tar.gz"))
+	// Remove the mutagen-agents.tar.gz file again and restart the app
+	err = os.Remove(filepath.Join(globalconfig.GetDDEVBinDir(), "mutagen-agents.tar.gz"))
+	require.NoError(t, err)
+	err = app.Restart()
+	require.NoError(t, err)
+	// Verify again that the mutagen-agents.tar.gz file was downloaded
+	assert.FileExists(filepath.Join(globalconfig.GetDDEVBinDir(), "mutagen-agents.tar.gz"))
 
 	// Make sure Mutagen daemon gets stopped on poweoff
 	ddevapp.PowerOff()
@@ -204,8 +223,7 @@ func TestMutagenConfigChange(t *testing.T) {
 		err = app.Stop(true, false)
 		assert.NoError(err)
 		// We can remove mutagen.yml and it will be recreated.
-		err = os.RemoveAll(app.GetConfigPath("mutagen/mutagen.yml"))
-		assert.NoError(err)
+		_ = os.RemoveAll(app.GetConfigPath("mutagen/mutagen.yml"))
 		assert.False(dockerutil.VolumeExists(ddevapp.GetMutagenVolumeName(app)))
 	})
 	err = app.Start()

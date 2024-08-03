@@ -45,17 +45,19 @@ Snapshots can be named for easier reference later on. For example, [`ddev snapsh
 
 Use the [`ddev snapshot restore`](../usage/commands.md#snapshot-restore) command to interactively choose among snapshots, or append `--latest` to restore the most recent snapshot: `ddev snapshot restore --latest`.
 
+Snapshots are stored as simple gzipped files in the project's `.ddev/db_snapshots` directory, and any or all snapshots can be removed with the `ddev snapshot --cleanup` command or by manually deleting the files when you want to save disk space or have no further use for them.
+
 ## Database Clients
 
 The `ddev mysql` and `ddev psql` commands give you direct access to the `mysql` and `psql` clients in the database container, which can be useful for quickly running commands while you work. You might run `ddev mysql` to use interactive commands like `DROP DATABASE backend;` or `SHOW TABLES;`, or do things like `echo "SHOW TABLES;" | ddev mysql` or `ddev mysql -uroot -proot` to get root privileges.
 
 The `web` and `db` containers are each ready with MySQL/PostgreSQL clients, so you can [`ddev ssh`](../usage/commands.md#ssh) or `ddev ssh -s db` and use `mysql` or `psql`.
 
-## `mysqldump` and `pgdump`
+## `mysqldump` and `pg_dump`
 
 The `web` and `db` containers come with `mysqldump`. You could run [`ddev ssh`](../usage/commands.md#ssh) to enter the web container, for example, then `mkdir /var/www/html/.tarballs` and run `mysqldump db >/var/www/html/.tarballs/db.sql` or run `mysqldump db | gzip >/var/www/html/.tarballs/db.sql.gz` to create database dumps. Because `/var/www/html` is mounted into the container from your project root, the `.tarballs` directory will also show up in the root of the project on your host machine.
 
-The PostgreSQL database container includes normal `pg` commands like `pgdump`.
+The PostgreSQL database container includes normal `pg` commands like `pg_dump`.
 
 ## Database GUIs
 
@@ -65,10 +67,10 @@ If you’d like to use a GUI database client, you’ll need the right connection
 * Adminer can be installed with `ddev get ddev/ddev-adminer`
 * The [`ddev describe`](../usage/commands.md#describe) command displays the `Host:` details you’ll need to connect to the `db` container externally, for example if you're using an on-host database browser like SequelAce.
 * macOS users can use `ddev sequelace` to launch the free [Sequel Ace](https://sequel-ace.com/) database browser, [`ddev tableplus`](../usage/commands.md#tableplus) to launch [TablePlus](https://tableplus.com), [`ddev querious`](../usage/commands.md#querious) to launch [Querious](https://www.araelium.com/querious), [`ddev dbeaver`](../usage/commands.md#dbeaver) to launch [DBeaver](https://dbeaver.io/), and the obsolete Sequel Pro is also supported with `ddev sequelpro`. (Each must be installed for the command to exist.)
-* Linux users can use [`ddev dbeaver`](../usage/commands.md#dbeaver) to launch [DBeaver](https://dbeaver.io/). (Must be installed for the command to exist.)
+* WSL2 and Linux users can use [`ddev dbeaver`](../usage/commands.md#dbeaver) to launch [DBeaver](https://dbeaver.io/). (Must be installed for the command to exist.)
 * PhpStorm (and all JetBrains tools) have a nice database browser. (If you use the [DDEV Integration plugin](https://plugins.jetbrains.com/plugin/18813-ddev-integration) this is all done for you.)
     * Choose a static [`host_db_port`](../configuration/config.md#host_db_port) setting for your project. For example `host_db_port: 59002` (each project’s database port should be different if you’re running more than one project at a time). Use [`ddev start`](../usage/commands.md#start) for it to take effect.
-    * Use the “database” tool to create a source from “localhost”, with the proper type “mysql” or “postgresql” and the port you chose, username `db` + password `db`.
+    * Use the “database” tool to create a source from “localhost”, with the proper type `mysql` or `postgresql` and the port you chose, username `db` + password `db`.
     * Explore away!
 * There’s a sample custom command that will run the free MySQL Workbench on macOS, Windows or Linux. To use it, run:
     * `cp ~/.ddev/commands/host/mysqlworkbench.example ~/.ddev/commands/host/mysqlworkbench`

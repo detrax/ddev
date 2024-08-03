@@ -1,3 +1,8 @@
+---
+search:
+  boost: 2
+---
+
 # FAQ
 
 Frequently-asked questions organized into high-level functionality, investigating issues, daily usage, and connecting with our community.
@@ -6,52 +11,51 @@ Frequently-asked questions organized into high-level functionality, investigatin
 
 ### What operating systems will DDEV work with?
 
-DDEV works nearly anywhere Docker will run, including macOS, Windows 10/11 Pro/Enterprise and Home, and every Linux variant we’ve ever tried. It also runs in many Linux-like environments, like ChromeOS (in Linux machine) and Windows 10/11’s WSL2. DDEV works the same on each of these platforms since the important work is done inside identical Docker containers.
+DDEV works nearly anywhere Docker will run, including macOS, WSL2, Windows 10/11 Pro/Enterprise and Home, and every Linux variant we’ve ever tried. It also runs in many Linux-like environments, like ChromeOS (in Linux machine). DDEV works the same on each of these platforms since the important work is done inside identical Docker containers. This means that a team using diverse environments can share everything without trouble.
 
-### Why do you recommend Colima over Docker Desktop on macOS?
+### Does DDEV change or deploy my code?
 
-[Colima](https://github.com/abiosoft/colima) (with its bundled [Lima](https://github.com/lima-vm/lima)) is similar to what Docker Desktop provides, with a great DDEV experience on Intel and Apple Silicon machines. We specifically recommend Colima because of some important differences:
+You are responsible for your code and its deployment. DDEV does not alter any code or fix any bugs in it. DDEV *does* add DDEV-specific settings for some CMSes if the [settings management](cms-settings.md) is enabled. These items are excluded by `.gitignore` so they won't affect a deployed project, but in most cases they would do no harm if deployed, because they check to see if they're running in DDEV context.
 
-* It’s open source software with an MIT license, unlike Docker Desktop which is proprietary software. No license fee to Docker, Inc. and no paid Docker plan required for larger organizations.
-* It’s CLI-focused, unlike Docker Desktop’s GUI.
-* It’s focused directly on running containers.
-* It’s fast and stable.
+### Why do I have to type `ddev` in front of so many commands?
 
-### Are there alternate Docker providers I can use?
+When you are using commands like `ddev composer`, `ddev drush`, `ddev npm`, or `ddev yarn`, you are telling DDEV to execute that very command inside the web container. That is where the exact tool for the exact environment required by your project lives. It's possible to execute `composer install` without  prepending `ddev` in your project folder, but often you won't have the same PHP version on your host computer as your project is configured to use inside the container, or perhaps you'll have a different version of `composer` even. This can lead into workarounds like having to use `composer --ignore-platform-reqs` or even introducing incompatibilities  into your project. With tools like `ddev composer` you are able to run several projects at the same time, each with different configurations, but when you use the tool inside the container, you get the exact configuration for the project you've configured. You can run any tool inside the web container with `ddev exec`, but many commands like `ddev composer` have two-word shortcuts.
 
-Many users report good results with alternate Docker providers.
+### Where is my database stored in my DDEV project?
 
-| Docker Provider            | Support Level                                                           |
-|----------------------------|-------------------------------------------------------------------------|
-| Docker Desktop for Mac     | officially tested and supported on both Intel and Apple Silicon         |
-| Docker Desktop for Windows | officially tested and supported on WSL2 and traditional Windows         |
-| Colima (macOS)             | officially tested and supported                                         |
-| Colima (Linux)             | reported working in v1.22.2+, but poor solution compared to docker-ce   |
-| docker-ce (Linux/WSL2)     | Officially supported with automated tests on WSL2/Ubuntu                |
-| Rancher Desktop (macOS)    | reported working fine on macOS, not supported or automatically tested   |
-| OrbStack (macOS)           | excellent reports on macOS, not yet supported or and no automated tests |
+The MariaDB, MySQL, or PostgreSQL database for your project lives in a Docker volume, which means it does not appear in your DDEV project's filesystem, and is not checked in. This configuration is for performance and portability reasons, but it means that if you change Docker providers or do a factory reset on your Docker provider, you will lose databases. By default many Docker providers do not keep Docker volumes where they are backed up by normal backup solutions. Remember to keep backups using `ddev export-db` or `ddev snapshot`. See [How can I migrate from one Docker provider to another](#how-can-i-migrate-from-one-docker-provider-to-another).
+
+### What Docker providers can I use?
+
+We have automated testing and support for a staggering range of Docker providers.
+
+| Docker Provider            | Support Level                                                            |
+|----------------------------|--------------------------------------------------------------------------|
+| OrbStack (macOS)           | officially tested and supported on macOS                                 |
+| Docker Desktop for Mac     | officially tested and supported on both Intel and Apple Silicon          |
+| Docker Desktop for Windows | officially tested and supported on WSL2 and traditional Windows          |
+| Colima (macOS)             | officially tested and supported, no longer recommended                   |
+| Colima (Linux)             | reported working in DDEV v1.22+, but poor solution compared to docker-ce |
+| Docker-ce (Linux/WSL2)     | officially supported with automated tests on WSL2/Ubuntu. Recommended.   |
+| Rancher Desktop (macOS)    | officially tested and supported on macOS                                 |
 
 * Docker Desktop for Linux does *not* work with DDEV because it mounts all files into the container owned as root.
 * Rancher Desktop for Windows does not work with DDEV.
 
 ### How can I migrate from one Docker provider to another?
 
-There are many Docker providers on DDEV’s supported platforms. For example, on macOS people use Docker Desktop and Colima (both officially supported) and they also use [OrbStack](https://orbstack.dev/) and [Rancher Desktop](https://rancherdesktop.io/), which don't yet have official DDEV support with automated tests. On Windows WSL2, people may use Docker Desktop or Docker CE inside WSL2. In all cases, if you want to switch between Docker providers, save your database and make sure the Docker providers don't interfere with each other:
+There are many Docker providers on DDEV’s supported platforms. For example, on macOS people use Docker Desktop and OrbStack along with Colima and Rancher Desktop. On Windows WSL2, people may use Docker Desktop or Docker CE inside WSL2. In all cases, if you want to switch between Docker providers, save your database and make sure the Docker providers don't interfere with each other:
 
 1. Save away your projects' databases. You can run `ddev snapshot --all` to make snapshots of all *registered* projects (that show up in `ddev list`). If you prefer a different way of saving database dumps, that works too!
 2. Stop the Docker provider you're moving from. For example, exit Docker Desktop.
 3. Start the Docker provider you're moving to.
 4. Start projects and restore their databases. For example, you could run `ddev snapshot restore --latest` to load a snapshot taken in step one.
 
-### Can I run DDEV on an older Mac?
-
-Probably! You’ll need to install an older, unsupported version of Docker Desktop—but you can likely use it to run the latest DDEV version.
-
-Check out [this Stack Overflow answer](https://stackoverflow.com/a/69964995/897279) for a walk through the process.
-
 ### Do I need to install PHP, Composer, nginx, or Node.js/npm on my workstation?
 
-No. These tools live inside DDEV’s Docker containers, so you only need to [install Docker](../install/docker-installation.md) and [install DDEV](../install/ddev-installation.md). This is especially handy for Windows users where there’s more friction getting these things installed.
+No. Tools like PHP, Composer, nginx, and Node.js/npm live inside DDEV’s Docker containers, so you only need to [install Docker](../install/docker-installation.md) and [install DDEV](../install/ddev-installation.md).
+
+For most users we recommend that you do *not* install PHP or composer on your workstation, so you get in the habit of using `ddev composer`, which will use the configured composer and PHP versions for your project, which can be different for each project. See [DDEV and Composer](developer-tools.md#ddev-and-composer).
 
 ### Do I lose data when I run `ddev poweroff`, `ddev stop`, or `ddev restart`?
 
@@ -78,28 +82,59 @@ The username, password, and database are each `db` regardless of how you connect
 
 ### Can I use additional databases with DDEV?
 
-Yes, you can create additional databases and manually do whatever you need on them. They’re created automatically if you use `ddev import-db` with the `--target-db` option. In this example, `extradb.sql.gz` is extracted and imported to a newly-created database named `extradb`:
+Yes, you can create additional databases and manually do whatever you need on them. They’re created automatically if you use `ddev import-db` with the `--database` option. In this example, `extradb.sql.gz` is extracted and imported to a newly-created database named `extradb`:
 
 ```
-ddev import-db --target-db=extradb --file=.tarballs/extradb.sql.gz
+ddev import-db --database=extradb --file=.tarballs/extradb.sql.gz
 ```
 
 You can use [`ddev mysql`](../usage/commands.md#mysql) or `ddev psql` to execute queries, or use the MySQL/PostgreSQL clients within `ddev ssh` or `ddev ssh -s db`. See the [Database Management](database-management.md) page.
 
 ### Can different projects communicate with each other?
 
-Yes, this is commonly required for situations like Drupal migrations. For the `web` container to access the `db` container of another project, use `ddev-<projectname>-db` as the hostname of the other project.
+Yes, this is commonly required for situations like Drupal migrations or server-side API calls between projects.
 
-Let’s say we have two projects, for example: project A, and project B. In project A, use `mysql -h ddev-projectb-db` to access the database server of project B. For HTTP/S communication (i.e. API calls) you can 1) access the web container of project B directly with the hostname `ddev-<projectb>-web` and port 80 or 443: `curl https://ddev-projectb-web` or 2) Add a `.ddev/docker-compose.communicate.yaml` to project A to access project B via the official FQDN.
+#### Communicate with database of other project
 
-```yaml
-services:
-  web:
-    external_links:
-      - "ddev-router:projectb.ddev.site"
-```
+For the `web` container to access the `db` container of another project, use `ddev-<projectname>-db` as the hostname of the other project.
 
-This lets the `ddev-router` know that project A can access the web container on project B's DDEV URL. If you are using other hostnames or `project_tld`, you will need to adjust the `projectb.ddev.site` value.
+Let’s say we have two projects, for example: project A, and project B.
+
+In project A, use `mysql -h ddev-projectb-db` to access the database server of project B.
+
+#### Communicate via HTTP/S
+
+Let’s say we have two projects, for example: project A, and project B.
+
+To enable server-side HTTP/S communication (i.e. server-side API calls) between projects you can:
+
+1. Either access the web container of project B directly with the hostname `ddev-<projectb>-web` and port 80 or 443 from project A:
+
+    ```bash
+    # call from project A web container to project B's web container
+    curl https://ddev-projectb-web
+    ```
+
+2. Or add a `.ddev/docker-compose.communicate.yaml` to project A:
+
+    ```yaml
+    # add this to project A, allows connection to project B
+    services:
+      web:
+        external_links:
+          - "ddev-router:projectb.ddev.site"
+    ```
+
+    This lets the `ddev-router` know that project A can access the web container on project B's official FQDN.
+
+    You can now make calls to project B via the regular FQDN `https://projectb.ddev.site` from project A:
+
+    ```bash
+    # call from project A web container to project B's web container
+    curl https://projectb.ddev.site
+    ```
+
+    If you are using other hostnames or `project_tld`, you will need to adjust the `projectb.ddev.site` value.
 
 ### Can I run DDEV with other development environments at the same time?
 
@@ -109,6 +144,12 @@ It’s probably easiest, however, to shut down one before using the other.
 
 For example, if you use Lando for one project, do a `lando poweroff` before using DDEV, and then run [`ddev poweroff`](../usage/commands.md#poweroff) before using Lando again. If you run nginx or Apache locally, stop them before using DDEV. The [troubleshooting](troubleshooting.md) section goes into more detail about identifying and resolving port conflicts.
 
+### Can I run DDEV on an older Mac?
+
+Probably! You’ll need to install an older, unsupported version of Docker Desktop—but you can likely use it to run the latest DDEV version.
+
+Check out [this Stack Overflow answer](https://stackoverflow.com/a/69964995/897279) for a walk through the process.
+
 ## Performance & Troubleshooting
 
 ### How can I get the best performance?
@@ -117,7 +158,7 @@ Docker’s normal mounting can be slow, especially on macOS. See the [Performanc
 
 ### How can I troubleshoot what’s going wrong?
 
-See the [troubleshooting](troubleshooting.md), [Docker troubleshooting](../install/docker-installation.md#testing-and-troubleshooting##-your-docker-installation) and [Xdebug troubleshooting](../debugging-profiling/step-debugging.md#troubleshooting-xdebug) sections.
+See the [troubleshooting](troubleshooting.md), [Docker troubleshooting](../install/docker-installation.md#testing-and-troubleshooting-your-docker-installation) and [Xdebug troubleshooting](../debugging-profiling/step-debugging.md#troubleshooting-xdebug) sections.
 
 ### How can I check that Docker is working?
 
@@ -154,27 +195,29 @@ RewriteCond %{HTTPS} off
 RewriteRule (.*) https://%{HTTP_HOST}/$1 [R=301,L]
 ```
 
+### My browser redirects `http` URLs to `https`
+
+Several browsers want you to use `https`, so they will automatically redirect you to the `https` version of a site. This may not be what you want, and things may break on redirect. For example, the Apache SOLR web UI often doesn't work with `https`, and when it redirects it things might break.
+
+To solve this for your browser, see:
+
+* [Google Chrome](https://stackoverflow.com/q/73875589)
+* [Mozilla Firefox](https://stackoverflow.com/q/30532471)
+* [Safari](https://stackoverflow.com/q/46394682)
+
+### Why is `ddev-webserver` such a huge Docker image?
+
+When you update DDEV you'll see it pull a `ddev-webserver` image which is almost half a gigabyte compressed, and this can be an inconvenient thing to wait for when you're doing an upgrade, especially if you have a slow internet connection.
+
+The reason that `ddev-webserver` is so big is that it's built for your daily requirements for a local development environment. It lets you switch PHP versions or switch between `nginx` and `apache` web servers with a simple `ddev restart`, rather than a lengthy build process. It lets you use Xdebug with a simple `ddev xdebug on`. It has many, many features and tools that make it easy for you as a developer, but that one would not include in a production image.
+
 ## Workflow
 
 ### How can I update/upgrade DDEV?
 
-You’ll want to update DDEV using the same method you chose to install it. Since upgrading is basically the same as installing, you can follow [DDEV Installation](../install/ddev-installation.md) to upgrade.
+See **[Upgrading DDEV](../install/ddev-upgrade.md)** for your operating system and installation technique.
 
-You can use the [`self-upgrade`](../usage/commands.md#self-upgrade) command for getting instructions tailored to your installation.
-
-* On macOS you likely installed via Homebrew; run `brew update && brew upgrade ddev`.
-<!-- markdownlint-disable-next-line -->
-* On Linux + WSL2 using Debian/Ubuntu’s `apt install` technique, run `sudo apt update && sudo apt upgrade ddev` like any other package on your system.
-<!-- markdownlint-disable-next-line -->
-* On Linux + WSL2 with a Homebrew install, run `brew update && brew upgrade ddev`.
-* On macOS or Linux (including WSL2) if you installed using the [install_ddev.sh script](https://github.com/ddev/ddev/blob/master/scripts/install_ddev.sh), run it again:
-    <!-- markdownlint-disable -->
-    ```
-    curl -fsSL https://ddev.com/install.sh | bash
-    ```
-    <!-- markdownlint-restore -->
-* On traditional Windows, you likely installed with Chocolatey or by downloading the installer package. You can upgrade with `choco upgrade ddev` or by visiting the [releases](https://github.com/ddev/ddev/releases) page and downloading the installer. Both techniques will work.
-* On Arch-Linux based systems, use the standard upgrade techniques, e.g. `yay -Syu`.
+You can use the [`ddev self-upgrade`](../usage/commands.md#self-upgrade) command for quick instructions tailored to your installation.
 
 ### How can I install a specific version of DDEV?
 
@@ -182,8 +225,34 @@ If you’re using Homebrew, first run `brew unlink ddev` to get rid of the versi
 
 1. Download the version you want from the [releases page](https://github.com/ddev/ddev/releases) and place it in your `$PATH`.
 2. Use the [install_ddev.sh](https://raw.githubusercontent.com/ddev/ddev/master/scripts/install_ddev.sh) script with the version number argument. For example, if you want v1.21.5, run `curl -fsSL https://ddev.com/install.sh | bash -s v1.21.5`.
-3. On Debian/Ubuntu/WSL2 with DDEV installed via apt, you can run `sudo apt update && sudo apt install ddev=<version>`, for example `sudo apt install ddev=1.21.5`.
+3. On Debian/Ubuntu/WSL2 with DDEV installed via apt, you can run `sudo apt-get update && sudo apt-get install ddev=<version>`, for example `sudo apt-get install ddev=1.21.5`.
 4. If you want the very latest, unreleased version of DDEV, run `brew unlink ddev && brew install ddev/ddev/ddev --HEAD`.
+
+### Why do I have an old DDEV?
+
+You may have installed DDEV several times using different techniques. Use `which -a ddev` to find all installed binaries. For example, you could install a DDEV in WSL2 with Homebrew, forget about it for a while, install it manually, and then install it again with `apt`:
+
+```bash
+$ which -a ddev
+/home/linuxbrew/.linuxbrew/bin/ddev # installed with Homebrew
+/usr/local/bin/ddev # installed manually with install_ddev.sh script
+/usr/bin/ddev # installed with apt or yum/rpm
+/bin/ddev # don't touch it, it's a link to /usr/bin/ddev
+```
+
+You can check each binary version by its full path (`/usr/bin/ddev --version`) to find old versions. Remove them preferably in the same way you installed them, i.e. `/home/linuxbrew/.linuxbrew/bin/ddev` should be removed with Homebrew: `brew uninstall ddev`. A manually installed DDEV can be removed by deleting the `ddev` binary.
+
+Restart the terminal (or run `hash -r`) after uninstalling other versions of DDEV for the changes to take effect.
+
+If you see duplicates in the `which -a ddev` output, it means that some directories are added to your `$PATH` more than once. You can either ignore this or remove the extra directory from your `$PATH`.
+
+### Should I check in the `.ddev` directory? How about add-ons?
+
+Most teams check in the project `.ddev` directory. That way all team members will have the exact same configuration for the project, even if they're on different operating systems or architectures or Docker providers.
+
+DDEV [add-ons](../extend/additional-services.md) are installed via the `.ddev` directory, so checking things in will get them as well, and that's also recommended practice.
+
+Do *not* alter or check in the `.ddev/.gitignore` as it is automatically generated to DDEV and does its best to figure out what files you "own" (like the `.ddev/config.yaml`) and which files DDEV "owns", so do not have to be committed.
 
 ### How can I back up or restore all project databases?
 
@@ -196,6 +265,8 @@ See [Sharing Your Project](../topics/sharing.md).
 ### How do I make DDEV match my production environment?
 
 You can change the major PHP version and choose between nginx+fpm (default) and Apache+fpm and choose the MariaDB/MySQL/PostgreSQL version add [extra services like Solr and Memcached](../extend/additional-services.md). You won’t be able to make every detail match your production server, but with database server type and version, PHP version and web server type you’ll be close.
+
+The [lightly maintained rfay/ddev-php-patch-build add-on](https://github.com/rfay/ddev-php-patch-build) may allow you to use a specific PHP patch version.
 
 ### How do I completely destroy a project?
 
@@ -216,7 +287,7 @@ Delete it and migrate it to a new project with your preferred name:
 1. Export the project’s database: `ddev export-db --file=/path/to/db.sql.gz`.
 2. Delete the project: `ddev delete <project>`. (This takes a snapshot by default for safety.)
 3. Rename the project: `ddev config --project-name=<new_name>`.
-4. Start thew new project with `ddev start`.
+4. Start the new project with `ddev start`.
 5. Import the database dump from step one: `ddev import-db --file=/path/to/db.sql.gz`.
 
 ### How can I move a project to another directory?
@@ -241,7 +312,7 @@ This is exactly the same as moving a project from one computer to another descri
 
 If you see “The hostname <hostname> is not currently resolvable” and you can successfully `ping <hostname>`, it may be that DNS resolution is slow.
 
-DDEV doesn’t have control over your computer’s name resolution, so it doesn’t have any way to influence how your browser gets an IP address from a hostname. It knows you have to be connected to the internet to do that, and uses a test DNS lookup of `<somethingrandom>.ddev.site` as a way to guess whether you’re connected to the internet. If it’s unable to do a name lookup, or if the hostname associated with your project is not `*.ddev.site`, it will try to create entries in `/etc/hosts`, since it’s assuming you can’t look up your project’s hostname(s) via DNS. If your internet (and name resolution) is actually working, but DNS is slow, run `ddev config global --internet-detection-timeout-ms=3000` to set the timeout to 3 seconds (or higher). See [this GitHub issue](https://github.com/ddev/ddev/issues/2409#issuecomment-662448025) for more. (If DNS rebinding is disallowed on your network/router, this won’t be solvable without network/router changes. Help [here](https://github.com/ddev/ddev/issues/2409#issuecomment-675083658) and [here](https://github.com/ddev/ddev/issues/2409#issuecomment-686718237).) For more detailed troubleshooting information, please see the [troubleshooting section](troubleshooting.md#ddev-starts-fine-but-my-browser-cant-access-the-url-url-server-ip-address-could-not-be-found-or-we-cant-connect-to-the-server-at-url).
+DDEV doesn’t have control over your computer’s name resolution, so it doesn’t have any way to influence how your browser gets an IP address from a hostname. It knows you have to be connected to the internet to do that, and uses a test DNS lookup of `<somethingrandom>.ddev.site` as a way to guess whether you’re connected to the internet. If it’s unable to do a name lookup, or if the hostname associated with your project is not `*.ddev.site`, it will try to create entries in `/etc/hosts`, since it’s assuming you can’t look up your project’s hostname(s) via DNS. If your internet (and name resolution) is actually working, but DNS is slow, run `ddev config global --internet-detection-timeout-ms=3000` to set the timeout to 3 seconds (or higher). See [this GitHub issue](https://github.com/ddev/ddev/issues/2409#issuecomment-662448025) for more. (If DNS rebinding is disallowed on your network/router, this won’t be solvable without network/router changes. Help [here](https://github.com/ddev/ddev/issues/2409#issuecomment-675083658) and [here](https://github.com/ddev/ddev/issues/2409#issuecomment-686718237).) For more detailed troubleshooting information, please see the [troubleshooting section](troubleshooting.md#ddev-starts-but-browser-cant-access-url).
 
 ### How can I configure a project with the defaults without hitting <kbd>RETURN</kbd> a bunch of times?
 
@@ -252,7 +323,7 @@ If anything in `.ddev/config.yaml` is wrong, you can edit that directly or use [
 
 ### How do I get support?
 
-See the [support options](../support.md), including [Discord](https://discord.gg/kDvSFBSZfs), [Stack Overflow](https://stackoverflow.com/questions/tagged/ddev) and the [issue queue](https://github.com/ddev/ddev/issues).
+See the [support options](../support.md), including [Discord](https://discord.gg/5wjP76mBJD), [Stack Overflow](https://stackoverflow.com/questions/tagged/ddev) and the [issue queue](https://github.com/ddev/ddev/issues).
 
 ### How can I contribute to DDEV?
 
@@ -261,10 +332,10 @@ We love and welcome contributions of knowledge, support, docs, and code:
 * Submit an issue or pull request to the [main repository](https://github.com/ddev/ddev).
 * Add your external resource to [awesome-ddev](https://github.com/ddev/awesome-ddev).
 * Add your recipe or HOWTO to [ddev-contrib](https://github.com/ddev/ddev-contrib).
-* Help others in [Discord](https://discord.gg/kDvSFBSZfs) and on [Stack Overflow](https://stackoverflow.com/tags/ddev).
+* Help others in [Discord](https://discord.gg/5wjP76mBJD) and on [Stack Overflow](https://stackoverflow.com/tags/ddev).
 * Contribute financially via [GitHub Sponsors](https://github.com/sponsors/rfay).
 * Get involved with DDEV governance and the [Advisory Group](https://github.com/ddev/ddev/discussions/categories/ddev-advisory-group).
 
 ### How do financial contributions support DDEV?
 
-Thanks for asking! Contributions made via [GitHub Sponsors](https://github.com/sponsors/rfay) go to the [Localdev Foundation](https://localdev.foundation) and are used for infrastructure and supporting development.
+Thanks for asking! Contributions made via [GitHub Sponsors](https://github.com/sponsors/ddev) go to the [DDEV Foundation](https://ddev.com/foundation) and are used for infrastructure and supporting development.

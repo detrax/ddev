@@ -1,25 +1,23 @@
 package cmd
 
 import (
-	"strconv"
-	"testing"
-
-	"github.com/ddev/ddev/pkg/fileutil"
-	"github.com/ddev/ddev/pkg/globalconfig"
-	"github.com/ddev/ddev/pkg/nodeps"
-	"github.com/stretchr/testify/require"
-
+	"fmt"
 	"os"
 	"path/filepath"
-
+	"reflect"
+	"strconv"
 	"strings"
-
-	"fmt"
+	"testing"
 
 	"github.com/ddev/ddev/pkg/ddevapp"
 	"github.com/ddev/ddev/pkg/exec"
+	"github.com/ddev/ddev/pkg/fileutil"
+	"github.com/ddev/ddev/pkg/globalconfig"
+	"github.com/ddev/ddev/pkg/nodeps"
 	"github.com/ddev/ddev/pkg/testcommon"
+	copy2 "github.com/otiai10/copy"
 	asrt "github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 )
 
@@ -67,16 +65,13 @@ func TestConfigDescribeLocation(t *testing.T) {
 		assert.NoError(err)
 		out, err := exec.RunHostCommand(DdevBin, "delete", "-Oy", t.Name())
 		assert.NoError(err, "output=%s", out)
-		err = os.RemoveAll(tmpDir)
-		assert.NoError(err)
-
+		_ = os.RemoveAll(tmpDir)
 	})
-	out, err := exec.RunHostCommand(DdevBin, "config", "--docroot=.", "--project-name="+t.Name())
+	_, err = exec.RunHostCommand(DdevBin, "config", "--docroot=.", "--project-name="+t.Name())
 	assert.NoError(err)
-	assert.Contains(string(out), "Configuring unrecognized codebase as project of type 'php'")
 
 	// Now see if we can detect it
-	out, err = exec.RunHostCommand(DdevBin, "config", "--show-config-location")
+	out, err := exec.RunHostCommand(DdevBin, "config", "--show-config-location")
 	assert.NoError(err)
 	assert.Contains(string(out), tmpDir)
 
@@ -85,8 +80,7 @@ func TestConfigDescribeLocation(t *testing.T) {
 	t.Cleanup(func() {
 		err = os.Chdir(origDir)
 		assert.NoError(err)
-		err = os.RemoveAll(tmpDir)
-		assert.NoError(err)
+		_ = os.RemoveAll(tmpDir)
 	})
 	err = os.Chdir(tmpDir)
 	assert.NoError(err)
@@ -121,13 +115,13 @@ func TestConfigWithSitenameFlagDetectsDocroot(t *testing.T) {
 	assert.NoError(err)
 
 	// Create a config
-	args := []string{"config", "--project-name=config-with-sitename", "--php-version=7.2"}
+	args := []string{"config", "--project-name", t.Name(), "--php-version=7.2"}
 	out, err := exec.RunCommand(DdevBin, args)
 	assert.NoError(err)
-	defer func() {
-		_, _ = exec.RunCommand(DdevBin, []string{"delete", "-Oy", "config-with-sitename"})
-	}()
-	assert.Contains(string(out), "Configuring a 'drupal6' codebase with docroot", nodeps.AppTypeDrupal6)
+	t.Cleanup(func() {
+		_, _ = exec.RunCommand(DdevBin, []string{"delete", "-Oy", t.Name()})
+	})
+	assert.Contains(out, fmt.Sprintf("Configuring a '%s' project named '%s' with docroot '", nodeps.AppTypeDrupal6, t.Name()))
 }
 
 // TestConfigSetValues sets all available configuration values using command flags, then confirms that the
@@ -135,37 +129,32 @@ func TestConfigWithSitenameFlagDetectsDocroot(t *testing.T) {
 func TestConfigSetValues(t *testing.T) {
 	assert := asrt.New(t)
 
+	projectName := strings.ToLower(t.Name())
 	origDir, _ := os.Getwd()
+	_, _ = exec.RunHostCommand(DdevBin, "stop", "--unlist", projectName)
 
 	// Create a temporary directory and switch to it.
 	tmpDir := testcommon.CreateTmpDir(t.Name())
-	err := os.Chdir(tmpDir)
-	assert.NoError(err)
+	_ = os.Chdir(tmpDir)
+
+	var err error
 
 	t.Cleanup(func() {
 		err = os.Chdir(origDir)
 		assert.NoError(err)
-		out, err := exec.RunHostCommand(DdevBin, "delete", "-Oy", t.Name())
+		out, err := exec.RunHostCommand(DdevBin, "delete", "-Oy", projectName)
 		assert.NoError(err, "output=%s", out)
-		err = os.RemoveAll(tmpDir)
-		assert.NoError(err)
+		_ = os.RemoveAll(tmpDir)
 	})
 
-	// Create an existing docroot
-	docroot := "web"
-	if err = os.MkdirAll(filepath.Join(tmpDir, docroot), 0755); err != nil {
-		t.Errorf("Could not create docroot %s in %s", docroot, tmpDir)
-	}
-
-	err = os.Chdir(tmpDir)
-	assert.NoError(err)
+	_ = os.Chdir(tmpDir)
 
 	// Build config args
-	projectName := t.Name()
-	projectType := nodeps.AppTypeTYPO3
-	phpVersion := nodeps.PHP71
-	httpPort := "81"
-	httpsPort := "444"
+	docroot := "web"
+	projectType := nodeps.AppTypePHP
+	phpVersion := nodeps.PHP81
+	routerHTTPPort := "81"
+	routerHTTPSPort := "444"
 	hostDBPort := "60001"
 	hostWebserverPort := "60002"
 	hostHTTPSPort := "60003"
@@ -205,8 +194,8 @@ func TestConfigSetValues(t *testing.T) {
 		"--php-version", phpVersion,
 		"--composer-root", composerRoot,
 		"--composer-version", composerVersion,
-		"--http-port", httpPort,
-		"--https-port", httpsPort,
+		"--router-http-port", routerHTTPPort,
+		"--router-https-port", routerHTTPSPort,
 		fmt.Sprintf("--xdebug-enabled=%t", xdebugEnabled),
 		fmt.Sprintf("--no-project-mount=%t", noProjectMount),
 		"--additional-hostnames", additionalHostnames,
@@ -233,18 +222,20 @@ func TestConfigSetValues(t *testing.T) {
 	}
 
 	out, err := exec.RunHostCommand(DdevBin, args...)
-	assert.NoError(err, "error running ddev %v: %v, output=%s", args, err, out)
+	require.NoError(t, err, "error running ddev %v: %v, output=%s", args, err, out)
+
+	// The second run of the config should not change the unspecified options,
+	// using the auto option here should not change the config at all
+	out, err = exec.RunHostCommand(DdevBin, "config", "--auto")
+	require.NoError(t, err, "error running ddev config --auto: '%s'", out)
 
 	configFile := filepath.Join(tmpDir, ".ddev", "config.yaml")
 	configContents, err := os.ReadFile(configFile)
-	if err != nil {
-		t.Errorf("Unable to read %s: %v", configFile, err)
-	}
+	require.NoError(t, err, "Unable to read '%s'", configFile)
 
 	app := &ddevapp.DdevApp{}
-	if err = yaml.Unmarshal(configContents, app); err != nil {
-		t.Errorf("Could not unmarshal %s: %v", configFile, err)
-	}
+	err = yaml.Unmarshal(configContents, app)
+	require.NoError(t, err, "Could not unmarshal '%s'", configFile)
 
 	assert.Equal(projectName, app.Name)
 	assert.Equal(docroot, app.Docroot)
@@ -252,8 +243,8 @@ func TestConfigSetValues(t *testing.T) {
 	assert.Equal(phpVersion, app.PHPVersion)
 	assert.Equal(composerRoot, app.ComposerRoot)
 	assert.Equal(composerVersion, app.ComposerVersion)
-	assert.Equal(httpPort, app.RouterHTTPPort)
-	assert.Equal(httpsPort, app.RouterHTTPSPort)
+	assert.Equal(routerHTTPPort, app.RouterHTTPPort)
+	assert.Equal(routerHTTPSPort, app.RouterHTTPSPort)
 	assert.Equal(hostWebserverPort, app.HostWebserverPort)
 	assert.Equal(hostDBPort, app.HostDBPort)
 	assert.Equal(xdebugEnabled, app.XdebugEnabled)
@@ -285,21 +276,35 @@ func TestConfigSetValues(t *testing.T) {
 		"--db-image-default",
 		"--web-working-dir-default",
 		"--db-working-dir-default",
+		`--omit-containers=""`,
+		`--additional-hostnames=""`,
+		`--additional-fqdns=""`,
+		`--webimage-extra-packages=""`,
+		`--dbimage-extra-packages=""`,
+		`--upload-dirs=""`,
+		`--web-environment=""`,
 	}
 
-	_, err = exec.RunHostCommand(DdevBin, args...)
-	assert.NoError(err)
+	out, err = exec.RunHostCommand(DdevBin, args...)
+	require.NoError(t, err, "args=%v, output=%s", args, out)
 
 	configContents, err = os.ReadFile(configFile)
-	assert.NoError(err, "Unable to read %s: %v", configFile, err)
+	require.NoError(t, err, "Unable to read %s: %v", configFile, err)
 
 	app = &ddevapp.DdevApp{}
 	err = yaml.Unmarshal(configContents, app)
-	assert.NoError(err, "Could not unmarshal %s: %v", configFile, err)
+	require.NoError(t, err, "Could not unmarshal %s: %v", configFile, err)
 
 	assert.Equal(app.ComposerRoot, "")
 	assert.Equal(app.WebImage, "")
 	assert.Equal(len(app.WorkingDir), 0)
+	assert.Empty(app.AdditionalHostnames)
+	assert.Empty(app.AdditionalFQDNs)
+	assert.Empty(app.DBImageExtraPackages)
+	assert.Empty(app.OmitContainers)
+	assert.Empty(app.UploadDirs)
+	assert.Empty(app.WebEnvironment)
+	assert.Empty(app.WebImageExtraPackages)
 
 	// Test that all container images and working dirs can each be unset with single default images flag
 	args = []string{
@@ -310,7 +315,7 @@ func TestConfigSetValues(t *testing.T) {
 	}
 
 	_, err = exec.RunHostCommand(DdevBin, args...)
-	assert.NoError(err)
+	require.NoError(t, err)
 
 	args = []string{
 		"config",
@@ -319,14 +324,14 @@ func TestConfigSetValues(t *testing.T) {
 	}
 
 	_, err = exec.RunHostCommand(DdevBin, args...)
-	assert.NoError(err)
+	require.NoError(t, err)
 
 	configContents, err = os.ReadFile(configFile)
-	assert.NoError(err, "Unable to read %s: %v", configFile, err)
+	require.NoError(t, err, "Unable to read %s: %v", configFile, err)
 
 	app = &ddevapp.DdevApp{}
 	err = yaml.Unmarshal(configContents, app)
-	assert.NoError(err, "Could not unmarshal %s: %v", configFile, err)
+	require.NoError(t, err, "Could not unmarshal %s: %v", configFile, err)
 
 	assert.Equal(app.WebImage, "")
 	assert.Equal(len(app.WorkingDir), 0)
@@ -338,14 +343,14 @@ func TestConfigSetValues(t *testing.T) {
 	}
 
 	_, err = exec.RunHostCommand(DdevBin, args...)
-	assert.NoError(err)
+	require.NoError(t, err)
 
 	configContents, err = os.ReadFile(configFile)
-	assert.NoError(err, "Unable to read %s: %v", configFile, err)
+	require.NoError(t, err, "Unable to read %s: %v", configFile, err)
 
 	app = &ddevapp.DdevApp{}
 	err = yaml.Unmarshal(configContents, app)
-	assert.NoError(err, "Could not unmarshal %s: %v", configFile, err)
+	require.NoError(t, err, "Could not unmarshal %s: %v", configFile, err)
 
 	assert.Equal(1, len(app.WebEnvironment))
 	assert.Equal([]string{webEnv}, app.WebEnvironment)
@@ -356,14 +361,14 @@ func TestConfigSetValues(t *testing.T) {
 	}
 
 	_, err = exec.RunHostCommand(DdevBin, args...)
-	assert.NoError(err)
+	require.NoError(t, err)
 
 	configContents, err = os.ReadFile(configFile)
-	assert.NoError(err, "Unable to read %s: %v", configFile, err)
+	require.NoError(t, err, "Unable to read %s: %v", configFile, err)
 
 	app = &ddevapp.DdevApp{}
 	err = yaml.Unmarshal(configContents, app)
-	assert.NoError(err, "Could not unmarshal %s: %v", configFile, err)
+	require.NoError(t, err, "Could not unmarshal %s: %v", configFile, err)
 
 	assert.Equal(4, len(app.WebEnvironment))
 	assert.Equal("BAR=baz", app.WebEnvironment[0])
@@ -454,7 +459,7 @@ func TestCmdDisasterConfig(t *testing.T) {
 		_, err = exec.RunHostCommand(DdevBin, "delete", "-Oy", t.Name())
 		assert.NoError(err)
 		_, err = exec.RunHostCommand(DdevBin, "delete", "-Oy", t.Name()+"_subdir")
-		assert.Error(err)
+		assert.NoError(err)
 		_ = os.RemoveAll(tmpDir)
 	})
 
@@ -481,19 +486,19 @@ func TestConfigDatabaseVersion(t *testing.T) {
 	origDir, _ := os.Getwd()
 	versionsToTest := nodeps.GetValidDatabaseVersions()
 	if os.Getenv("GOTEST_SHORT") != "" {
-		versionsToTest = []string{"mariadb:10.3", "mysql:5.7"}
+		versionsToTest = []string{"mariadb:10.11", "mysql:8.0", "postgres:16"}
 	}
 
 	// Create a temporary directory and switch to it.
-	tmpDir := testcommon.CreateTmpDir(t.Name())
-	err := os.Chdir(tmpDir)
+	testDir := testcommon.CreateTmpDir(t.Name())
+	err := os.Chdir(testDir)
 	require.NoError(t, err)
 
 	err = globalconfig.RemoveProjectInfo(t.Name())
 	assert.NoError(err)
 
 	out, err := exec.RunHostCommand(DdevBin, "config", "--project-name", t.Name())
-	assert.NoError(err, "Failed running ddev config --auto: %s", out)
+	assert.NoError(err, "Failed running ddev config --project-name: %s", out)
 
 	err = globalconfig.ReadGlobalConfig()
 	require.NoError(t, err)
@@ -506,8 +511,7 @@ func TestConfigDatabaseVersion(t *testing.T) {
 		assert.NoError(err)
 		err = os.Chdir(origDir)
 		assert.NoError(err)
-		err = os.RemoveAll(tmpDir)
-		assert.NoError(err)
+		_ = os.RemoveAll(testDir)
 	})
 
 	_, err = app.ReadConfig(false)
@@ -515,32 +519,28 @@ func TestConfigDatabaseVersion(t *testing.T) {
 	assert.Equal(nodeps.MariaDB, app.Database.Type)
 	assert.Equal(nodeps.MariaDBDefaultVersion, app.Database.Version)
 
-	err = app.Start()
-	assert.NoError(err)
-	err = app.Stop(true, false)
-	assert.NoError(err)
-
 	// Verify behavior with no existing config.yaml. It should
 	// add a database into the config and nothing else
 	for _, dbTypeVersion := range versionsToTest {
+		_ = app.Stop(true, false)
 		parts := strings.Split(dbTypeVersion, ":")
-		err = os.RemoveAll(filepath.Join(tmpDir, ".ddev"))
+		err = os.RemoveAll(filepath.Join(testDir, ".ddev"))
 		assert.NoError(err)
-		out, err := exec.RunHostCommand(DdevBin, "config", "--database", dbTypeVersion)
-		assert.NoError(err, "Failed to run ddev config --database %s: %s", dbTypeVersion, out)
+		out, err := exec.RunHostCommand(DdevBin, "config", "--database="+dbTypeVersion, "--project-name="+t.Name())
+		require.NoError(t, err, "Failed to run ddev config --database %s: %s", dbTypeVersion, out)
 		assert.Contains(out, "You may now run 'ddev start'")
 
 		// First test the bare explicit values found in the config.yaml,
 		// without the NewApp adjustments
 		app := &ddevapp.DdevApp{}
 		assert.NoError(err)
-		err = app.LoadConfigYamlFile(filepath.Join(tmpDir, ".ddev", "config.yaml"))
+		err = app.LoadConfigYamlFile(filepath.Join(testDir, ".ddev", "config.yaml"))
 		assert.NoError(err)
 		assert.Equal(parts[0], app.Database.Type)
 		assert.Equal(parts[1], app.Database.Version)
 
 		// Now use NewApp() to load, so that we get the full logic of that function.
-		app, err = ddevapp.NewApp(tmpDir, false)
+		app, err = ddevapp.NewApp(testDir, false)
 		assert.NoError(err)
 		t.Cleanup(func() {
 			err = app.Stop(true, false)
@@ -555,11 +555,110 @@ func TestConfigDatabaseVersion(t *testing.T) {
 	}
 }
 
+// TestConfigUpdate verifies that ddev config --update does the right things updating default
+// config, and does not do the wrong things.
+func TestConfigUpdate(t *testing.T) {
+	var err error
+	origDir, _ := os.Getwd()
+
+	// Create a temporary directory and switch to it.
+	testDir := testcommon.CreateTmpDir(t.Name())
+
+	t.Cleanup(func() {
+		app, _ := ddevapp.NewApp(testDir, false)
+		_ = app.Stop(true, false)
+		_ = os.Chdir(origDir)
+		_ = os.RemoveAll(testDir)
+	})
+	tests := map[string]struct {
+		input             string
+		baseExpectation   ddevapp.DdevApp
+		configExpectation ddevapp.DdevApp
+	}{
+		"drupal11-composer": {
+			baseExpectation:   ddevapp.DdevApp{Type: nodeps.AppTypePHP, PHPVersion: nodeps.PHPDefault, Docroot: "", CorepackEnable: false, Database: ddevapp.DatabaseDesc{Type: nodeps.MariaDB, Version: nodeps.MariaDBDefaultVersion}},
+			configExpectation: ddevapp.DdevApp{Type: nodeps.AppTypeDrupal, PHPVersion: nodeps.PHP83, Docroot: "web", CorepackEnable: true, Database: ddevapp.DatabaseDesc{Type: nodeps.MariaDB, Version: nodeps.MariaDBDefaultVersion}},
+		},
+		"drupal11-git": {
+			baseExpectation:   ddevapp.DdevApp{Type: nodeps.AppTypePHP, PHPVersion: nodeps.PHPDefault, Docroot: "", CorepackEnable: false, Database: ddevapp.DatabaseDesc{Type: nodeps.MariaDB, Version: nodeps.MariaDBDefaultVersion}},
+			configExpectation: ddevapp.DdevApp{Type: nodeps.AppTypeDrupal, PHPVersion: nodeps.PHP83, Docroot: "", CorepackEnable: true, Database: ddevapp.DatabaseDesc{Type: nodeps.MariaDB, Version: nodeps.MariaDBDefaultVersion}},
+		},
+		"drupal10-composer": {
+			baseExpectation:   ddevapp.DdevApp{Type: nodeps.AppTypePHP, PHPVersion: nodeps.PHPDefault, Docroot: "", CorepackEnable: false, Database: ddevapp.DatabaseDesc{Type: nodeps.MariaDB, Version: nodeps.MariaDBDefaultVersion}},
+			configExpectation: ddevapp.DdevApp{Type: nodeps.AppTypeDrupal, PHPVersion: nodeps.PHP83, Docroot: "web", CorepackEnable: false, Database: ddevapp.DatabaseDesc{Type: nodeps.MariaDB, Version: nodeps.MariaDBDefaultVersion}},
+		},
+		"craftcms": {
+			baseExpectation:   ddevapp.DdevApp{Type: nodeps.AppTypePHP, PHPVersion: nodeps.PHPDefault, Docroot: "", CorepackEnable: false, Database: ddevapp.DatabaseDesc{Type: nodeps.MariaDB, Version: nodeps.MariaDBDefaultVersion}},
+			configExpectation: ddevapp.DdevApp{Type: nodeps.AppTypeCraftCms, PHPVersion: nodeps.PHPDefault, Docroot: "web", CorepackEnable: false, Database: ddevapp.DatabaseDesc{Type: nodeps.MySQL, Version: "8.0"}},
+		},
+	}
+
+	for testName, expectation := range tests {
+		t.Run(testName, func(t *testing.T) {
+			// Delete existing
+			_ = globalconfig.RemoveProjectInfo(t.Name())
+			// Delete filesystem from existing
+			_ = os.RemoveAll(testDir)
+
+			err = os.MkdirAll(testDir, 0755)
+			require.NoError(t, err)
+			_ = os.Chdir(testDir)
+			require.NoError(t, err)
+
+			// Copy testdata in from source
+			testSource := filepath.Join(origDir, "testdata", t.Name())
+			err = copy2.Copy(testSource, testDir)
+			require.NoError(t, err)
+
+			// Start with an existing config.yaml and verify
+			app, err := ddevapp.NewApp("", false)
+			require.NoError(t, err)
+			_ = app.Stop(true, false)
+
+			// Original values should match
+			checkValues(t, testName, expectation.baseExpectation, app)
+
+			// ddev config --update and verify
+			out, err := exec.RunHostCommand(DdevBin, "config", "--update")
+			require.NoError(t, err, "failed to run ddev config --update: %v output=%s", err, out)
+
+			// Load the newly-created app to inspect it
+			app, err = ddevapp.NewApp("", false)
+			require.NoError(t, err)
+
+			// Updated values should match
+			checkValues(t, testName, expectation.configExpectation, app)
+
+		})
+	}
+}
+
+// checkValues compares several values of the expected and actual apps to make sure they're the same
+func checkValues(t *testing.T, name string, expectation ddevapp.DdevApp, app *ddevapp.DdevApp) {
+	assert := asrt.New(t)
+
+	reflectedExpectation := reflect.ValueOf(expectation)
+	reflectedApp := reflect.ValueOf(*app)
+
+	for _, member := range []string{"Type", "PHPVersion", "Docroot", "CorepackEnable", "Database"} {
+
+		fieldExpectation := reflectedExpectation.FieldByName(member)
+		if fieldExpectation.IsValid() {
+			fieldValueExpectation := fieldExpectation.Interface()
+			fieldValueApp := reflectedApp.FieldByName(member).Interface()
+			assert.Equal(fieldValueExpectation, fieldValueApp, "%s: field %s does not match", name, member)
+		}
+	}
+}
+
 // TestConfigGitignore checks that our gitignore is ignoring the right things.
 func TestConfigGitignore(t *testing.T) {
 	assert := asrt.New(t)
 
 	origDir, _ := os.Getwd()
+
+	tmpXdgConfigHomeDir := testcommon.CopyGlobalDdevDir(t)
+	globalDdevDir := globalconfig.GetGlobalDdevDir()
 
 	// Create a temporary directory and switch to it.
 	testDir := testcommon.CreateTmpDir(t.Name())
@@ -574,10 +673,8 @@ func TestConfigGitignore(t *testing.T) {
 		assert.NoError(err)
 		err = os.Chdir(origDir)
 		assert.NoError(err)
-		_, err = exec.RunHostCommand("bash", "-c", fmt.Sprintf("rm -f ~/.ddev/commands/web/%s ~/.ddev/homeadditions/%s", t.Name(), t.Name()))
-		assert.NoError(err)
-		err = os.RemoveAll(testDir)
-		assert.NoError(err)
+		testcommon.ResetGlobalDdevDir(t, tmpXdgConfigHomeDir)
+		_ = os.RemoveAll(testDir)
 	})
 
 	_, err = exec.RunHostCommand("git", "init")
@@ -593,10 +690,10 @@ func TestConfigGitignore(t *testing.T) {
 	out = strings.ReplaceAll(out, "new file:   .ddev/config.yaml", "")
 	assert.NotContains(out, "new file:")
 
-	_, err = exec.RunHostCommand("bash", "-c", fmt.Sprintf("touch ~/.ddev/commands/web/%s ~/.ddev/homeadditions/%s", t.Name(), t.Name()))
+	_, err = exec.RunHostCommand("bash", "-c", fmt.Sprintf(`touch "%s" "%s"`, filepath.Join(globalDdevDir, "commands", "web", t.Name()), filepath.Join(globalDdevDir, "homeadditions", t.Name())))
 	assert.NoError(err)
 	if err != nil {
-		out, err = exec.RunHostCommand("bash", "-c", "ls -l ~/.ddev && ls -lR ~/.ddev/commands ~/.ddev/homeadditions")
+		out, err = exec.RunHostCommand("bash", "-c", fmt.Sprintf(`ls -l "%s" && ls -lR "%s" "%s"`, globalDdevDir, filepath.Join(globalDdevDir, "commands"), filepath.Join(globalDdevDir, "homeadditions")))
 		assert.NoError(err)
 		t.Logf("Contents of global .ddev: \n=====\n%s\n====", out)
 	}

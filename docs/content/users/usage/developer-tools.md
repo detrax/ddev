@@ -13,7 +13,7 @@ Hundreds of useful developer tools are included inside the containers and can be
 * MySQL client (`mysql`) - Command-line interface for interacting with MySQL/MariaDB.
 * PostgreSQL client (`psql`) - Command-line tool for PostgreSQL.
 * [Drush](http://www.drush.org) - Command-line shell and Unix scripting interface for Drupal.
-* [PHIVE](https://phar.io/) - Command line tool for “PHAR Installation and Verification Environment”.
+* [PHIVE](https://phar.io/) - Command-line tool for “PHAR Installation and Verification Environment”.
 * [WP-CLI](http://wp-cli.org/) - Command-line tools for managing WordPress installations, available both as `wp` and as `wp-cli`.
 * `npm`, `nvm`, and `yarn` (these also have `ddev` shortcuts like [`ddev npm`](../usage/commands.md#npm), [`ddev nvm`](../usage/commands.md#nvm), [`ddev yarn`](../usage/commands.md#yarn)).
 * `node`
@@ -30,13 +30,24 @@ DDEV provides a built-in command to simplify use of PHP’s dependency manager, 
 * `ddev composer help` runs Composer’s help command to learn more about what’s available.
 * `ddev composer require <package>` tells Composer to require a specific PHP package for the current project.
 
-Additionally, Composer can be used to initialize new projects with `ddev composer create`. This command supports limited argument and flag options, and will install a new project to the project root in `/var/www/html`. The package and version arguments are required:
+Additionally, Composer can be used to initialize new projects with `ddev composer create`. This command supports limited argument and flag options, and will install a new project to the composer root (normally `/var/www/html`). The package and version arguments are required:
 
 `ddev composer create [<flags>] "<package>:<version>"`
 
 For example:
 
 `ddev composer create --no-dev "typo3/cms-base-distribution:^9"`
+
+When using `ddev composer create` your project should be essentially empty or the command will refuse to run, to avoid loss of your files.
+
+`ddev composer create` does these things in this order:
+
+1. `composer create-project --no-plugins --no-scripts --no-install` clones a bare Composer package without any additional actions.
+2. `composer run-script post-root-package-install` runs if `--no-scripts` is not given as a flag to `ddev composer create`.
+3. `composer install` runs if `--no-install` is not given as a flag to `ddev composer create`.
+4. `composer run-script post-create-project-cmd` runs if `--no-scripts` is not given as a flag to `ddev composer create`.
+
+All flags that you provide to `ddev composer create` are checked for validity. All invalid flags will be ignored. If they are valid for `composer create-project`, they will be also passed to `composer run-script` and `composer install`, but only if these commands support these flags.
 
 To execute a fully-featured `composer create-project` command, you can execute the command from within the container after executing [`ddev ssh`](../usage/commands.md#ssh), or pass the full command to [`ddev exec`](../usage/commands.md#exec), like so:
 
@@ -69,7 +80,7 @@ Use [`ddev composer`](../usage/commands.md#composer) (Composer inside the contai
 
 [Mailpit](https://github.com/axllent/mailpit) is a mail catcher that’s configured to capture and display emails sent by PHP in the development environment.
 
-After your project is started, access the Mailpit web interface at `https://mysite.ddev.site:8026`, or run [`ddev launch -m`](../usage/commands.md#launch) to launch it in your default browser.
+After your project is started, access the Mailpit web interface at `https://mysite.ddev.site:8026`, or run [`ddev mailpit`](../usage/commands.md#mailpit) to launch it in your default browser.
 
 Mailpit will **not** intercept emails if your application is configured to use SMTP or a third-party ESP integration.
 
@@ -106,18 +117,9 @@ You can use this port with various tools that need a direct port, like `mysql` o
 
 (If you use PhpStorm and its integrated database browser, use the [DDEV Integration Plugin](https://plugins.jetbrains.com/plugin/18813-ddev-integration) to manage all of this for you.)
 
-## Using Drush 8 Installation on Your Host Machine
-
-!!!warning
-    We don’t recommend using `drush` on your host machine. It’s also mostly irrelevant for Drupal 9+, as you should be using Composer-installed, project-level `drush`.
-
-If you have PHP and Drush installed on your host system and the environment variable `IS_DDEV_PROJECT=true`, you can use Drush to interact with a DDEV project. On the host machine, extra host-side configuration for the database and port in `settings.ddev.php` allow Drush to access the database server. This may not work for all Drush commands because the actual web server environment is not available.
-
-On Drupal 8+, if you want to use `drush uli` on the host (or other Drush commands that require a default URI), you’ll need to set `DRUSH_OPTIONS_URI` on the host. For example, `export DRUSH_OPTIONS_URI=https://mysite.ddev.site`.
-
 ## DDEV and Terminus
 
-[Terminus](https://docs.pantheon.io/terminus) is a command line tool providing advanced interaction with [Pantheon](https://pantheon.io/) services. `terminus` is available inside the project’s container, allowing users to get information from, or issue commands to their Pantheon-hosted sites. This is an especially helpful feature for Windows users since Terminus is only officially supported on Unix-based systems.
+[Terminus](https://docs.pantheon.io/terminus) is a command-line tool providing advanced interaction with [Pantheon](https://pantheon.io/) services. `terminus` is available inside the project’s container, allowing users to get information from, or issue commands to their Pantheon-hosted sites. This is an especially helpful feature for Windows users since Terminus is only officially supported on Unix-based systems.
 
 To use Terminus, you’ll first need to:
 

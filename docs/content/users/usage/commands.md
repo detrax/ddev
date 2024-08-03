@@ -109,6 +109,15 @@ ddev blackfire off
     * `on`: `start`, `enable`, `true`
     * `off`: `stop`, `disable`, `false`
 
+## `cake`
+
+Run the `cake` command; available only in projects of type `cakephp`, and only available if `cake.php` is in bin folder.
+
+```shell
+# Show all cake subcommands
+ddev cake
+```
+
 ## `clean`
 
 Removes items DDEV has created. (See [Uninstalling DDEV](../usage/uninstall.md).)
@@ -135,6 +144,8 @@ ddev clean my-project my-other-project
 
 Executes a [Composer command](../usage/developer-tools.md#ddev-and-composer) within the web container.
 
+`ddev composer create` is a special command that is an adaptation of `composer create-project`. See [DDEV and Composer](../usage/developer-tools.md#ddev-and-composer) for more information.
+
 Example:
 
 ```shell
@@ -142,9 +153,16 @@ Example:
 ddev composer install
 ```
 
+Example of `ddev composer create`:
+
+```shell
+# Create a new Drupal project in the current directory
+ddev composer create drupal/recommended-project
+```
+
 ## `config`
 
-Create or modify a DDEV project’s configuration in the current directory.
+Create or modify a DDEV project’s configuration in the current directory. By default, `ddev config` will not change configuration that already exists in your `.ddev/config.yaml`, it will only make changes you specify with flags. However, if you want to autodetect everything, `ddev config --update` will usually do everything you need.
 
 !!!tip "You can also set these via YAML!"
     These settings, plus a few more, can be set by editing stored [Config Options](../configuration/config.md).
@@ -155,8 +173,15 @@ Example:
 # Start interactive project configuration
 ddev config
 
-# Configure a Drupal 8 project with a `web` document root
-ddev config --docroot=web --project-type=drupal8
+# Accept defaults on a new project. This is the same as hitting <RETURN>
+# on every question in `ddev config`
+ddev config --auto
+
+## Detect docroot, project type, and expected defaults for an existing project
+ddev config --update
+
+# Configure a Drupal project with a `web` document root
+ddev config --docroot=web --project-type=drupal
 
 # Switch the project’s default `nginx-fpm` to `apache-fpm`
 ddev config --webserver-type=apache-fpm
@@ -164,20 +189,19 @@ ddev config --webserver-type=apache-fpm
 
 Flags:
 
-* `--additional-fqdns`: Comma-delimited list of project FQDNs.
-* `--additional-hostnames`: Comma-delimited list of project hostnames.
-* `--auto`: Automatically run config without prompting. (default `true`)
+* `--additional-fqdns`: Comma-delimited list of project FQDNs or `--additional-fqdns=""` to remove any configured FQDNs.
+* `--additional-hostnames`: Comma-delimited list of project hostnames or `--additional-hostnames=""` to remove any configured additional hostnames.
+* `--auto`: Automatically run config without prompting.
 * `--bind-all-interfaces`: Bind host ports on all interfaces, not only on localhost network interface.
 * `--composer-root`: Overrides the default Composer root directory for the web service.
 * `--composer-root-default`: Unsets a web service Composer root directory override.
 * `--composer-version`: Specify override for Composer version in the web container. This may be `""`, `"1"`, `"2"`, `"2.2"`, `"stable"`, `"preview"`, `"snapshot"`, or a specific version.
-* `--create-docroot`: Create the docroot if it doesn’t exist.
-* `--database`: Specify the database type:version to use. Defaults to `mariadb:10.4`.
+* `--database`: Specify the database type:version to use. Defaults to `mariadb:10.11`.
 * `--db-image`: Sets the db container image.
 * `--db-image-default`: Sets the default db container image for this DDEV version.
 * `--db-working-dir`: Overrides the default working directory for the db service.
 * `--db-working-dir-default`: Unsets a db service working directory override.
-* `--dbimage-extra-packages`: A comma-delimited list of Debian packages that should be added to db container when the project is started.
+* `--dbimage-extra-packages`: A comma-delimited list of Debian packages that should be added to db container when the project is started or `--dbimage-extra-packages=""` to remove previously configured packages.
 * `--default-container-timeout`: Default time in seconds that DDEV waits for all containers to become ready on start. (default `120`)
 * `--disable-settings-management`: Prevent DDEV from creating or updating CMS settings files.
 * `--disable-upload-dirs-warning`: Suppresses warning when a project is using `performance_mode: mutagen` but does not have `upload_dirs` set.
@@ -200,18 +224,19 @@ Flags:
 * `--php-version`: PHP version that will be enabled in the web container.
 * `--project-name`: Provide the project name of project to configure. (normally the same as the last part of directory name)
 * `--project-tld`: Set the top-level domain to be used for projects. (default `"ddev.site"`)
-* `--project-type`: Provide the project type: `backdrop`, `drupal10`, `drupal6`, `drupal7`, `drupal8`, `drupal9`, `laravel`, `magento`, `magento2`, `php`, `shopware6`, `silverstripe`, `typo3`, `wordpress`. This is autodetected and this flag is necessary only to override the detection.
+* `--project-type`: Provide the project type: `backdrop`, `drupal`, `drupal6`, `drupal7`, `laravel`, `magento`, `magento2`, `php`, `shopware6`, `silverstripe`, `typo3`, `wordpress`. This is autodetected and this flag is necessary only to override the detection.
 * `--show-config-location`: Output the location of the `config.yaml` file if it exists, or error that it doesn’t exist.
 * `--timezone`: Specify timezone for containers and PHP, like `Europe/London` or `America/Denver` or `GMT` or `UTC`.
-* `--upload-dirs`: Sets the project’s upload directories, the destination directories of the import-files command.
+* `--update`: Automatically detect and update settings by inspecting the code.
+* `--upload-dirs`: Sets the project’s upload directories, the destination directories of the import-files command, or `--upload-dirs=""` to remove previously configured values.
 * `--use-dns-when-possible`: Use DNS for hostname resolution instead of `/etc/hosts` when possible. (default `true`)
-* `--web-environment`: Set the environment variables in the web container: `--web-environment="TYPO3_CONTEXT=Development,SOMEENV=someval"`
+* `--web-environment`: Set the environment variables in the web container: `--web-environment="TYPO3_CONTEXT=Development,SOMEENV=someval"` or `--web-environment=""` to remove previously configured values.
 * `--web-environment-add`: Append environment variables to the web container: `--web-environment="TYPO3_CONTEXT=Development,SOMEENV=someval"`
 * `--web-image`: Sets the web container image.
 * `--web-image-default`: Sets the default web container image for this DDEV version.
 * `--web-working-dir`: Overrides the default working directory for the web service.
 * `--web-working-dir-default`: Unsets a web service working directory override.
-* `--webimage-extra-packages`: A comma-delimited list of Debian packages that should be added to web container when the project is started.
+* `--webimage-extra-packages`: A comma-delimited list of Debian packages that should be added to web container when the project is started or `--webimage-extra-packages=""` to remove any previously configured packages.
 * `--webserver-type`: Sets the project’s desired web server type: `nginx-fpm`, `nginx-gunicorn`, or `apache-fpm`.
 * `--working-dir-defaults`: Unsets all service working directory overrides.
 * `--xdebug-enabled`: Whether or not Xdebug is enabled in the web container.
@@ -236,7 +261,7 @@ ddev config global --omit-containers=ddev-ssh-agent
 * `--mailpit-http-port`: The Mailpit HTTP port *default* for all projects; can be overridden by project configuration.
 * `--mailpit-https-port`: The Mailpit HTTPS port *default* for all projects; can be overridden by project configuration.
 * `--no-bind-mounts`: If `true`, don’t use bind-mounts. Useful for environments like remote Docker where bind-mounts are impossible. (default is equal to `--no-bind-mounts=true`)
-* `--omit-containers`: For example, `--omit-containers=ddev-ssh-agent`.
+* `--omit-containers`: For example, `--omit-containers=ddev-ssh-agent` or `--omit-containers=""`.
 * `--performance-mode`: Performance optimization mode, possible values are `none`, `mutagen`, `nfs`.
 * `--performance-mode-reset`: Reset performance optimization mode to operating system default (`none` for Linux and WSL2, `mutagen` for macOS and traditional Windows).
 * `--project-tld`: Set the default top-level domain to be used for all projects. (default `"ddev.site"`). Note that this will be overridden in a project that defines `project_tld`.
@@ -263,7 +288,7 @@ ddev craft up
 
 ## `dbeaver`
 
-Open [DBeaver](https://dbeaver.io/) with the current project’s database (global shell host container command). This command is only available if `DBeaver.app` is installed as `/Applications/DBeaver.app` for macOS, and if `dbeaver` (or another binary like `dbeaver-ce`) available inside `/usr/bin` for Linux (Flatpak and snap support included).
+Open [DBeaver](https://dbeaver.io/) with the current project’s database (global shell host container command). This command is only available if `DBeaver.app` is installed as `/Applications/DBeaver.app` for macOS, if `dbeaver.exe` is installed to all users as `C:/Program Files/dbeaver/dbeaver.exe` for WSL2, and if `dbeaver` (or another binary like `dbeaver-ce`) available inside `/usr/bin` for Linux (Flatpak and snap support included).
 
 Example:
 
@@ -377,7 +402,7 @@ ddev debug get-volume-db-version
 
 ### `debug migrate-database`
 
-Migrate a MySQL or MariaDB database to a different `dbtype:dbversion`. Works only with MySQL and MariaDB, not with PostgreSQL.
+Migrate a MySQL or MariaDB database to a different `dbtype:dbversion`. Works only with MySQL and MariaDB, not with PostgreSQL. It will export your database, create a snapshot, destroy your current database, and import into the new database type. It only migrates the 'db' database. It will update the database version in your project's `config.yaml` file.
 
 Example:
 
@@ -513,7 +538,7 @@ ddev describe my-project
 
 ## `drush`
 
-Run the `drush` command; available only in projects of type `drupal*`, and only available if `drush` is in the project. On projects of type `drupal8` and higher, `drush` should be installed in the project itself, (`ddev composer require drush/drush`). On projects of type `drupal7` `drush` 8 is provided by DDEV.
+Run the `drush` command; available only in projects of type `drupal*`, and only available if `drush` is in the project. On projects of type `drupal`, `drush` should be installed in the project itself, (`ddev composer require drush/drush`). On projects of type `drupal7` `drush` 8 is provided by DDEV.
 
 ```shell
 # Show drush status/configuration
@@ -618,8 +643,8 @@ ddev get ddev/ddev-redis --verbose
 # Download the official Redis add-on, version v1.0.4
 ddev get ddev/ddev-redis --version v1.0.4
 
-# Download the Drupal 9 Solr add-on from its v0.0.5 release tarball
-ddev get https://github.com/ddev/ddev-drupal9-solr/archive/refs/tags/v0.0.5.tar.gz
+# Download the Drupal Solr add-on from its v1.2.3 release tarball
+ddev get https://github.com/ddev/ddev-drupal-solr/archive/refs/tags/v1.2.3.tar.gz
 
 # Copy an add-on available in another directory
 ddev get /path/to/package
@@ -641,7 +666,7 @@ In general, you can run `ddev get` multiple times without doing any damage. Upda
 
 ## `heidisql`
 
-Open [HeidiSQL](https://www.heidisql.com/) with the current project’s database (global shell host container command). This command is only available if `TablePlus.app` is installed as `C:\Program Files\HeidiSQL\Heidisql.exe`.
+Open [HeidiSQL](https://www.heidisql.com/) with the current project’s database (global shell host container command). This command is only available if `Heidisql.exe` is installed as `C:\Program Files\HeidiSQL\Heidisql.exe`.
 
 Example:
 
@@ -715,7 +740,7 @@ gzip -dc db.sql.gz | ddev import-db
 
 ## `import-files`
 
-Pull the uploaded files directory of an existing project to the default [public upload directory](../usage/cli.md#ddev-import-files) of your project.
+Pull the uploaded files directory of an existing project to the default public upload directory of your project. More usage information and a description of the Tar or ZIP archive is in the [usage section](../usage/cli.md#ddev-import-files).
 
 Flags:
 
@@ -747,6 +772,13 @@ Flags:
 
 * `--mailpit`, `-m`: Open Mailpit.
 
+!!!tip "How to disable HTTP redirect to HTTPS?"
+    Recommendations for:
+
+    * [Google Chrome](https://stackoverflow.com/q/73875589)
+    * [Mozilla Firefox](https://stackoverflow.com/q/30532471)
+    * [Safari](https://stackoverflow.com/q/46394682)
+
 Example:
 
 ```shell
@@ -758,6 +790,12 @@ ddev launch --mailpit
 
 # Open your project’s base URL appended with `temp/phpinfo.php`
 ddev launch temp/phpinfo.php
+
+# Open the full URL (any website) in the default browser
+ddev launch https://your.ddev.site
+
+# Open your project’s base URL using a specific port
+ddev launch :3000
 ```
 
 ## `list`
@@ -771,7 +809,7 @@ Flags:
 * `--active-only`, `-A`: If set, only currently active projects will be displayed.
 * `--continuous`: If set, project information will be emitted until the command is stopped.
 * `--continuous-sleep-interval`, `-I`: Time in seconds between `ddev list --continuous` output lists. (default `1`)
-* `--type`, `-t`: Show only projects of this type (e.g. `drupal8`, `wordpress`, `php`).
+* `--type`, `-t`: Show only projects of this type (e.g. `drupal`, `wordpress`, `php`).
 * `--wrap-table`, `-W`: Display table with wrapped text if required.
 
 Example:
@@ -812,6 +850,17 @@ ddev logs -s db
 
 # Display recent logs from my-project’s database server
 ddev logs -s db my-project
+```
+
+## `mailpit`
+
+Launch a browser with mailpit for the current project (global shell host container command).
+
+Example:
+
+```shell
+# Open Mailpit in the default browser
+ddev mailpit
 ```
 
 ## `magento`
@@ -904,6 +953,17 @@ ddev mutagen sync
 ddev mutagen sync my-project
 ```
 
+### `mutagen version`
+
+Display the version of the Mutagen binary and the location of its components.
+
+Example:
+
+```shell
+# Print Mutagen details
+ddev mutagen version
+```
+
 ## `mysql`
 
 Run MySQL client in the database container (global shell db container command). This is only available on projects that use the `mysql` or `mariadb` database types.
@@ -939,12 +999,30 @@ ddev npm update
 
 Run [`nvm`](https://github.com/nvm-sh/nvm#usage) inside the web container (global shell web container command).
 
+!!!tip
+    Use of `ddev nvm` is discouraged because `nodejs_version` is much easier to use, can specify any version, and is more robust than using `nvm`.
+
 Example:
 
 ```shell
-# Use `nvm` to switch to Node.js v18
+# Use `nvm` to switch to Node.js v20
+ddev nvm install 20
+
+# Check the installed Node.js version
+ddev nvm current
+
+# Reset Node.js to `nodejs_version`
+ddev nvm alias default system
+
+# Switch between two installed Node.js versions
+ddev nvm install 20
 ddev nvm install 18
+ddev nvm alias default 20
+ddev nvm alias default 18
 ```
+
+!!!warning "`nvm use` works only inside the web container after `ddev ssh`"
+    Use `ddev nvm alias default <version>` instead.
 
 ## `php`
 
@@ -1102,7 +1180,7 @@ Common commands:
 
 ## `self-upgrade`
 
-Output instructions for updating or upgrading DDEV. The command doesn’t perform the upgrade, but tries to provide instructions relevant to your installation. Must be executed from the project context.
+Output instructions for updating or upgrading DDEV. The command doesn’t perform the upgrade, but tries to provide instructions relevant to your installation.
 
 Example:
 
@@ -1279,7 +1357,6 @@ Start a DDEV project.
 Flags:
 
 * `--all`, `-a`: Start all projects.
-* `--select`, `-s`: Interactively select a project to start.
 * `--skip-confirmation`, `-y`: Skip any confirmation steps.
 
 Example:
@@ -1306,7 +1383,6 @@ Flags:
 * `--all`, `-a`: Stop and remove all running or container-stopped projects and remove from global projects list.
 * `--omit-snapshot`, `-O`: Omit/skip database snapshot.
 * `--remove-data`, `-R`: Remove stored project data (MySQL, logs, etc.).
-* `--select`, `-s`: Interactively select a project to stop.
 * `--snapshot`, `-S`: Create database snapshot.
 * `--stop-ssh-agent`: Stop the `ddev-ssh-agent` container.
 * `--unlist`, `-U`: Remove the project from global project list, so it won’t appear in [`ddev list`](#list) until started again.
@@ -1393,6 +1469,9 @@ ddev xdebug on
 
 # Turn Xdebug off
 ddev xdebug off
+
+# Toggle Xdebug on and off
+ddev xdebug toggle
 ```
 
 ## `xhprof`
@@ -1421,7 +1500,10 @@ ddev xhprof off
 Run [`yarn` commands](https://yarnpkg.com/cli) inside the web container in the root of the project (global shell host container command).
 
 !!!tip
-    Use `--cwd` for another directory.
+    Use `--cwd` for another directory, or you can change directories to the desired directory and `ddev yarn` will act on the same relative directory inside the container.
+
+!!!tip
+    If you want to define your Yarn version on a per project basis, set `corepack_enable: true` in `.ddev/config.yaml` or `ddev config --corepack-enable`
 
 Example:
 
@@ -1432,6 +1514,14 @@ ddev yarn install
 # Use Yarn to add the Lerna package
 ddev yarn add lerna
 
+# Use yarn in a relative directory
+cd web/core && ddev yarn add lerna
+
 # Use Yarn to add the Lerna package from the `web/core` directory
 ddev yarn --cwd web/core add lerna
+
+# Use latest yarn or specified yarn
+ddev config --corepack-enable && ddev restart
+ddev yarn set version stable
+ddev yarn --version
 ```

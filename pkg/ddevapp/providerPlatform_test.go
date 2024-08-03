@@ -60,7 +60,7 @@ func TestPlatformPull(t *testing.T) {
 	app, err := ddevapp.NewApp(siteDir, true)
 	assert.NoError(err)
 	app.Name = t.Name()
-	app.Type = nodeps.AppTypeDrupal9
+	app.Type = nodeps.AppTypeDrupal
 	err = app.Stop(true, false)
 	require.NoError(t, err)
 	err = app.WriteConfig()
@@ -73,8 +73,7 @@ func TestPlatformPull(t *testing.T) {
 		assert.NoError(err)
 
 		_ = os.Chdir(origDir)
-		err = os.RemoveAll(siteDir)
-		assert.NoError(err)
+		_ = os.RemoveAll(siteDir)
 	})
 
 	err = ddevapp.PopulateExamplesCommandsHomeadditions(app.Name)
@@ -128,8 +127,7 @@ func TestPlatformPush(t *testing.T) {
 		assert.NoError(err)
 
 		_ = os.Chdir(origDir)
-		err = os.RemoveAll(siteDir)
-		assert.NoError(err)
+		_ = os.RemoveAll(siteDir)
 	})
 
 	app.Name = t.Name()

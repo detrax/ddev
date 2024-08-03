@@ -11,7 +11,7 @@ import (
 var DebugCapabilitiesCmd = &cobra.Command{
 	Use:   "capabilities",
 	Short: "Show capabilities of this version of DDEV",
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 		capabilities := []string{
 			"multiple-dockerfiles",
 			"interactive-project-selection",
@@ -27,6 +27,8 @@ var DebugCapabilitiesCmd = &cobra.Command{
 			"web-start-hooks",
 			"add-on-versioning",
 			"multiple-upload-dirs",
+			"debian-bookworm",
+			"corepack",
 		}
 		output.UserOut.WithField("raw", capabilities).Print(strings.Join(capabilities, "\n"))
 	},

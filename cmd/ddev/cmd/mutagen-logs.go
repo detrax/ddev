@@ -1,14 +1,15 @@
 package cmd
 
 import (
-	"github.com/ddev/ddev/pkg/ddevapp"
-	"github.com/ddev/ddev/pkg/globalconfig"
-	"github.com/ddev/ddev/pkg/util"
-	"github.com/spf13/cobra"
 	"os"
 	"os/exec"
 	"os/signal"
 	"syscall"
+
+	"github.com/ddev/ddev/pkg/ddevapp"
+	"github.com/ddev/ddev/pkg/globalconfig"
+	"github.com/ddev/ddev/pkg/util"
+	"github.com/spf13/cobra"
 )
 
 // MutagenLogsCmd implements the ddev mutagen logs command
@@ -16,9 +17,9 @@ var MutagenLogsCmd = &cobra.Command{
 	Use:     "logs",
 	Short:   "Show Mutagen logs for debugging",
 	Example: `"ddev mutagen logs"`,
-	Run: func(cmd *cobra.Command, args []string) {
+	Run: func(_ *cobra.Command, _ []string) {
 
-		ddevapp.StopMutagenDaemon()
+		ddevapp.StopMutagenDaemon("")
 		_ = os.Setenv("MUTAGEN_LOG_LEVEL", "trace")
 
 		sigs := make(chan os.Signal, 1)

@@ -244,7 +244,6 @@ func (p *Provider) UploadDB() error {
 	_ = os.Mkdir(p.getDownloadDir(), 0755)
 
 	if p.DBPushCommand.Command == "" {
-		util.Warning("No DBPushCommand is defined for provider '%s'", p.ProviderType)
 		return nil
 	}
 
@@ -274,7 +273,6 @@ func (p *Provider) UploadFiles() error {
 	_ = os.Mkdir(p.getDownloadDir(), 0755)
 
 	if p.FilesPushCommand.Command == "" {
-		util.Warning("No FilesPushCommand is defined for provider '%s'", p.ProviderType)
 		return nil
 	}
 
@@ -309,7 +307,6 @@ func (p *Provider) doFilesPullCommand() (filename []string, error error) {
 	_ = os.MkdirAll(destDir, 0755)
 
 	if p.FilesPullCommand.Command == "" {
-		util.Warning("No FilesPullCommand is defined for provider '%s'", p.ProviderType)
 		return nil, nil
 	}
 	s := p.FilesPullCommand.Service
@@ -328,11 +325,16 @@ func (p *Provider) doFilesPullCommand() (filename []string, error error) {
 // getDatabaseBackups retrieves database using `generic backup database`, then
 // describe until it appears, then download it.
 func (p *Provider) getDatabaseBackups() (filename []string, error error) {
-	_ = os.RemoveAll(p.getDownloadDir())
-	_ = os.Mkdir(p.getDownloadDir(), 0755)
+	err := os.RemoveAll(p.getDownloadDir())
+	if err != nil {
+		return nil, err
+	}
+	err = os.Mkdir(p.getDownloadDir(), 0755)
+	if err != nil {
+		return nil, err
+	}
 
 	if p.DBPullCommand.Command == "" {
-		util.Warning("No DBPullCommand is defined for provider '%s'", p.ProviderType)
 		return nil, nil
 	}
 
@@ -340,7 +342,7 @@ func (p *Provider) getDatabaseBackups() (filename []string, error error) {
 	if s == "" {
 		s = "web"
 	}
-	err := p.app.MutagenSyncFlush()
+	err = p.app.MutagenSyncFlush()
 	if err != nil {
 		return nil, err
 	}

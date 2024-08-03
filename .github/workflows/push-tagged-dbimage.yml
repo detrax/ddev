@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Base tag for pushed dbimage (v1.19.4 for example)'
+        description: Base tag for pushed dbimage (v1.22.7 for example)'
         required: true
         default: ""
       debug_enabled:
@@ -30,18 +30,15 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        dbtype: [mariadb_5.5, mariadb_10.0, mariadb_10.1, mariadb_10.2, mariadb_10.3, mariadb_10.4, mariadb_10.5, mariadb_10.6, mariadb_10.7, mariadb_10.8, mariadb_10.11, mysql_5.5, mysql_5.6, mysql_5.7, mysql_8.0]
+        dbtype: [mariadb_5.5, mariadb_10.0, mariadb_10.1, mariadb_10.2, mariadb_10.3, mariadb_10.4, mariadb_10.5, mariadb_10.6, mariadb_10.7, mariadb_10.8, mariadb_10.11, mariadb_11.4, mysql_5.5, mysql_5.6, mysql_5.7, mysql_8.0]
       fail-fast: false
 
     steps:
     - uses: actions/checkout@v4
     - name: Set up QEMU
       uses: docker/setup-qemu-action@v3
-      with:
-        image: tonistiigi/binfmt:master
-        platforms: all
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@master
+      uses: docker/setup-buildx-action@v3
     - name: Login to DockerHub
       uses: docker/login-action@v3
       with:
@@ -57,4 +54,3 @@ jobs:
       run: |
         cd "containers/ddev-dbserver"
         make ${{ matrix.dbtype }} PUSH=true VERSION="${TAG}"
-

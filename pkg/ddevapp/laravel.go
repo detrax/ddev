@@ -2,11 +2,12 @@ package ddevapp
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+
 	"github.com/ddev/ddev/pkg/fileutil"
 	"github.com/ddev/ddev/pkg/nodeps"
 	"github.com/ddev/ddev/pkg/util"
-	"os"
-	"path/filepath"
 )
 
 const (
@@ -43,8 +44,18 @@ func laravelPostStartAction(app *DdevApp) error {
 		}
 	}
 	port := "3306"
-	dbConnection := "mysql"
-	if app.Database.Type == nodeps.Postgres {
+	dbConnection := "mariadb"
+	if app.Database.Type == nodeps.MariaDB {
+		hasMariaDbDriver, _ := fileutil.FgrepStringInFile(filepath.Join(app.AppRoot, "config/database.php"), "mariadb")
+		if !hasMariaDbDriver {
+			// Older versions of Laravel (before 11) use "mysql" driver for MariaDB
+			// This change is required to prevent this error on "php artisan migrate":
+			// InvalidArgumentException Database connection [mariadb] not configured
+			dbConnection = "mysql"
+		}
+	} else if app.Database.Type == nodeps.MySQL {
+		dbConnection = "mysql"
+	} else if app.Database.Type == nodeps.Postgres {
 		dbConnection = "pgsql"
 		port = "5432"
 	}
@@ -56,6 +67,7 @@ func laravelPostStartAction(app *DdevApp) error {
 		"DB_USERNAME":   "db",
 		"DB_PASSWORD":   "db",
 		"DB_CONNECTION": dbConnection,
+		"MAIL_MAILER":   "smtp",
 		"MAIL_HOST":     "127.0.0.1",
 		"MAIL_PORT":     "1025",
 	}
@@ -67,8 +79,9 @@ func laravelPostStartAction(app *DdevApp) error {
 	return nil
 }
 
-// laravelConfigOverrideAction overrides php_version for Laravel, requires PHP8.1
-func laravelConfigOverrideAction(app *DdevApp) error {
-	app.PHPVersion = nodeps.PHP81
-	return nil
-}
+// laravelConfigOverrideAction would require PHP8.2
+// but that is now the default for DDEV v1.23+
+//func laravelConfigOverrideAction(app *DdevApp) error {
+//	app.PHPVersion = nodeps.PHP82
+//	return nil
+//}

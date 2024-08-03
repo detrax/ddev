@@ -1,9 +1,10 @@
-image: ddev/ddev-gitpod-base:20231030
+image: ddev/ddev-gitpod-base:20240702
 tasks:
   - name: build-run
     init: |
       # Compile ddev
       make
+      ddev config global --omit-containers=ddev-router
       ddev debug download-images
       mkcert -install
     command: |

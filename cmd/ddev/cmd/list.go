@@ -16,9 +16,9 @@ var ListCmd = &cobra.Command{
 	Example: `ddev list
 ddev list --active-only
 ddev list -A
-ddev list --type=drupal8
-ddev list -t drupal8`,
-	Run: func(cmd *cobra.Command, args []string) {
+ddev list --type=cakephp
+ddev list -t typo3`,
+	Run: func(_ *cobra.Command, _ []string) {
 		ddevapp.List(listCommandSettings)
 	},
 }

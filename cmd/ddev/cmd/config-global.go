@@ -2,10 +2,12 @@ package cmd
 
 import (
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 
 	configTypes "github.com/ddev/ddev/pkg/config/types"
+	"github.com/ddev/ddev/pkg/fileutil"
 	"github.com/ddev/ddev/pkg/globalconfig"
 	globalconfigTypes "github.com/ddev/ddev/pkg/globalconfig/types"
 	"github.com/ddev/ddev/pkg/nodeps"
@@ -47,7 +49,7 @@ func handleGlobalConfig(cmd *cobra.Command, _ []string) {
 	}
 	if cmd.Flag("omit-containers").Changed {
 		omitContainers = strings.Replace(omitContainers, " ", "", -1)
-		if omitContainers == "" {
+		if omitContainers == "" || omitContainers == `""` || omitContainers == `''` {
 			globalconfig.DdevGlobalConfig.OmitContainersGlobal = []string{}
 		} else {
 			globalconfig.DdevGlobalConfig.OmitContainersGlobal = strings.Split(omitContainers, ",")
@@ -56,7 +58,7 @@ func handleGlobalConfig(cmd *cobra.Command, _ []string) {
 	}
 	if cmd.Flag("web-environment").Changed {
 		env := strings.TrimSpace(webEnvironmentGlobal)
-		if env == "" {
+		if env == "" || env == `""` || env == `''` {
 			globalconfig.DdevGlobalConfig.WebEnvironment = []string{}
 		} else {
 			globalconfig.DdevGlobalConfig.WebEnvironment = strings.Split(env, ",")
@@ -259,33 +261,32 @@ func handleGlobalConfig(cmd *cobra.Command, _ []string) {
 			util.Failed("Failed to write global config: %v", err)
 		}
 	}
-	output.UserOut.Println("Global configuration:")
-	output.UserOut.Printf("instrumentation-opt-in=%v", globalconfig.DdevGlobalConfig.InstrumentationOptIn)
-	output.UserOut.Printf("omit-containers=[%s]", strings.Join(globalconfig.DdevGlobalConfig.OmitContainersGlobal, ","))
-	output.UserOut.Printf("web-environment=[%s]", strings.Join(globalconfig.DdevGlobalConfig.WebEnvironment, ","))
-	output.UserOut.Printf("%s=%v", configTypes.FlagPerformanceModeName, globalconfig.DdevGlobalConfig.GetPerformanceMode())
 
-	output.UserOut.Printf("router-bind-all-interfaces=%v", globalconfig.DdevGlobalConfig.RouterBindAllInterfaces)
-	output.UserOut.Printf("internet-detection-timeout-ms=%v", globalconfig.DdevGlobalConfig.InternetDetectionTimeout)
-	output.UserOut.Printf("disable-http2=%v", globalconfig.DdevGlobalConfig.DisableHTTP2)
-	output.UserOut.Printf("use-letsencrypt=%v", globalconfig.DdevGlobalConfig.UseLetsEncrypt)
-	output.UserOut.Printf("letsencrypt-email=%v", globalconfig.DdevGlobalConfig.LetsEncryptEmail)
-	output.UserOut.Printf("table-style=%v", globalconfig.DdevGlobalConfig.TableStyle)
-	output.UserOut.Printf("simple-formatting=%v", globalconfig.DdevGlobalConfig.SimpleFormatting)
-	output.UserOut.Printf("use-hardened-images=%v", globalconfig.DdevGlobalConfig.UseHardenedImages)
-	output.UserOut.Printf("fail-on-hook-fail=%v", globalconfig.DdevGlobalConfig.FailOnHookFailGlobal)
-	output.UserOut.Printf("required-docker-compose-version=%v", globalconfig.DdevGlobalConfig.RequiredDockerComposeVersion)
-	output.UserOut.Printf("use-docker-compose-from-path=%v", globalconfig.DdevGlobalConfig.UseDockerComposeFromPath)
-	output.UserOut.Printf("project-tld=%v", globalconfig.DdevGlobalConfig.ProjectTldGlobal)
-	output.UserOut.Printf("xdebug-ide-location=%v", globalconfig.DdevGlobalConfig.XdebugIDELocation)
-	output.UserOut.Printf("no-bind-mounts=%v", globalconfig.DdevGlobalConfig.NoBindMounts)
-	output.UserOut.Printf("router=%v", globalconfig.DdevGlobalConfig.Router)
-	output.UserOut.Printf("wsl2-no-windows-hosts-mgt=%v", globalconfig.DdevGlobalConfig.WSL2NoWindowsHostsMgt)
-	output.UserOut.Printf("router-http-port=%v", globalconfig.DdevGlobalConfig.RouterHTTPPort)
-	output.UserOut.Printf("router-https-port=%v", globalconfig.DdevGlobalConfig.RouterHTTPSPort)
-	output.UserOut.Printf("mailpit-http-port=%v", globalconfig.DdevGlobalConfig.RouterMailpitHTTPPort)
-	output.UserOut.Printf("mailpit-https-port=%v", globalconfig.DdevGlobalConfig.RouterMailpitHTTPSPort)
-	output.UserOut.Printf("traefik-monitor-port=%v", globalconfig.DdevGlobalConfig.TraefikMonitorPort)
+	v := reflect.ValueOf(globalconfig.DdevGlobalConfig)
+	typeOfVal := v.Type()
+
+	keys := make([]string, 0, v.NumField())
+	valMap := map[string]string{}
+	for i := 0; i < v.NumField(); i++ {
+		tag := typeOfVal.Field(i).Tag.Get("yaml")
+		parts := strings.Split(tag, ",")
+		tag = parts[0]
+		//name := typeOfVal.Field(i).Name
+		fieldValue := v.Field(i).Interface()
+		if tag != "build info" && tag != "web_environment" && tag != "project_info" && tag != "remote_config" && tag != "messages" {
+			tagWithDashes := strings.Replace(tag, "_", "-", -1)
+			valMap[tagWithDashes] = fmt.Sprintf("%v", fieldValue)
+			keys = append(keys, tagWithDashes)
+		}
+	}
+	sort.Strings(keys)
+	if !output.JSONOutput {
+		for _, label := range keys {
+			output.UserOut.Printf("%s=%v", label, valMap[label])
+		}
+	} else {
+		output.UserOut.WithField("raw", valMap).Println("")
+	}
 }
 
 func init() {
@@ -297,9 +298,9 @@ func init() {
 	configGlobalCommand.Flags().BoolVarP(&instrumentationOptIn, "instrumentation-opt-in", "", false, "instrumentation-opt-in=true")
 	configGlobalCommand.Flags().Bool("router-bind-all-interfaces", false, "router-bind-all-interfaces=true")
 	configGlobalCommand.Flags().Int("internet-detection-timeout-ms", 3000, "Increase timeout when checking internet timeout, in milliseconds")
-	configGlobalCommand.Flags().Bool("disable-http2", false, "Optionally disable http2 in deprecated nginx-proxy ddev-router, 'ddev global --disable-http2' or `ddev global --disable-http2=false'")
-	configGlobalCommand.Flags().Bool("use-letsencrypt", false, "Enables experimental Let's Encrypt integration, 'ddev global --use-letsencrypt' or `ddev global --use-letsencrypt=false'")
-	configGlobalCommand.Flags().String("letsencrypt-email", "", "Email associated with Let's Encrypt, `ddev global --letsencrypt-email=me@example.com'")
+	configGlobalCommand.Flags().Bool("disable-http2", false, "Optionally disable http2 in deprecated nginx-proxy ddev-router, 'ddev config global --disable-http2' or `ddev config global --disable-http2=false'")
+	configGlobalCommand.Flags().Bool("use-letsencrypt", false, "Enables experimental Let's Encrypt integration, 'ddev config global --use-letsencrypt' or `ddev config global --use-letsencrypt=false'")
+	configGlobalCommand.Flags().String("letsencrypt-email", "", "Email associated with Let's Encrypt, `ddev config global --letsencrypt-email=me@example.com'")
 	configGlobalCommand.Flags().Bool("simple-formatting", false, "If true, use simple formatting and no color for tables")
 	configGlobalCommand.Flags().Bool("use-hardened-images", false, "If true, use more secure 'hardened' images for an actual internet deployment.")
 	configGlobalCommand.Flags().Bool("fail-on-hook-fail", false, "If true, 'ddev start' will fail when a hook fails.")
@@ -307,11 +308,11 @@ func init() {
 	_ = configGlobalCommand.Flags().MarkDeprecated("mutagen-enabled", fmt.Sprintf("please use --%s instead", configTypes.FlagPerformanceModeName))
 	configGlobalCommand.Flags().String(configTypes.FlagPerformanceModeName, configTypes.FlagPerformanceModeDefault, configTypes.FlagPerformanceModeDescription(configTypes.ConfigTypeGlobal))
 	configGlobalCommand.Flags().Bool(configTypes.FlagPerformanceModeResetName, true, configTypes.FlagPerformanceModeResetDescription(configTypes.ConfigTypeGlobal))
-	configGlobalCommand.Flags().String("table-style", "", "Table style for list and describe, see ~/.ddev/global_config.yaml for values")
+	configGlobalCommand.Flags().String("table-style", "", fmt.Sprintf("Table style for list and describe, see %s for values", fileutil.ShortHomeJoin(globalconfig.GetGlobalConfigPath())))
 	configGlobalCommand.Flags().String("required-docker-compose-version", "", "Override default docker-compose version (used only in development testing)")
 	_ = configGlobalCommand.Flags().MarkHidden("required-docker-compose-version")
 	configGlobalCommand.Flags().String("project-tld", "", "Override default project tld")
-	configGlobalCommand.Flags().Bool("use-docker-compose-from-path", true, "If true, use docker-compose from path instead of private ~/.ddev/bin/docker-compose (used only in development testing)")
+	configGlobalCommand.Flags().Bool("use-docker-compose-from-path", true, fmt.Sprintf("If true, use docker-compose from path instead of private %s (used only in development testing)", fileutil.ShortHomeJoin(globalconfig.GetDDEVBinDir(), "docker-compose")))
 	_ = configGlobalCommand.Flags().MarkHidden("use-docker-compose-from-path")
 	configGlobalCommand.Flags().Bool("no-bind-mounts", true, "If true, don't use bind-mounts - useful for environments like remote Docker where bind-mounts are impossible")
 	configGlobalCommand.Flags().String("xdebug-ide-location", "", "For less usual IDE locations specify where the IDE is running for Xdebug to reach it")
