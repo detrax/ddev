@@ -13,7 +13,7 @@ To get started with [Backdrop](https://backdropcms.org), clone the project repos
     ```bash
     mkdir my-backdrop-site && cd my-backdrop-site
     curl -LJO https://github.com/backdrop/backdrop/releases/latest/download/backdrop.zip
-    unzip ./backdrop.zip && rm backdrop.zip && mv -f ./backdrop/{.,}* . && rm -r backdrop
+    unzip ./backdrop.zip && rm -f backdrop.zip && mv -f ./backdrop/{.,}* . ; rm -rf backdrop
     ddev config --project-type=backdrop
     ddev start
     ddev launch
@@ -322,7 +322,7 @@ Visit [Ibexa documentation](https://doc.ibexa.co/en/latest/getting_started/insta
 ```bash
 mkdir my-joomla-site && cd my-joomla-site
 tag=$(curl -L "https://api.github.com/repos/joomla/joomla-cms/releases/latest" | docker run -i --rm ddev/ddev-utilities jq -r .tag_name) && curl -L "https://github.com/joomla/joomla-cms/releases/download/$tag/Joomla_$tag-Stable-Full_Package.zip" -o joomla.zip
-unzip ./joomla.zip && rm joomla.zip
+unzip ./joomla.zip && rm -f joomla.zip
 ddev config --project-type=php --webserver-type=apache-fpm --upload-dirs=images
 ddev start
 ddev php installation/joomla.php install --site-name="My Joomla Site" --admin-user="Administrator" --admin-username=admin --admin-password=AdminAdmin1! --admin-email=admin@example.com --db-type=mysql --db-encryption=0 --db-host=db --db-user=db --db-pass="db" --db-name=db --db-prefix=ddev_ --public-folder=""
@@ -417,18 +417,40 @@ The Laravel project type can be used for [StarterKits](https://laravel.com/docs/
 
     Normal details of a Composer build for Magento 2 are on the [Magento 2 site](https://experienceleague.adobe.com/docs/commerce-operations/installation-guide/composer.html). You must have a public and private key to install from Magento’s repository. When prompted for “username” and “password” in `composer create`, it’s asking for your public key as "username" and private key as "password".
 
-    Note that you can install the Adobe/Magento composer credentials in your global `~/.ddev/homeadditions/.composer/auth.json` and never have to find them again. See [In-Container Home Directory and Shell Configuration](extend/in-container-configuration.md).
+    !!!tip "Store Adobe/Magento Composer credentials in the global DDEV config"
+        If you have Composer installed on your workstation and have an `auth.json` you can reuse the `auth.json` by making a symlink. See [In-Container Home Directory and Shell Configuration](extend/in-container-configuration.md):
+
+        ```
+        mkdir -p ~/.ddev/homeadditions/.composer && ln -s ~/.composer/auth.json ~/.ddev/homeadditions/.composer/auth.json
+        ```
+
+        Alternately, you can install the Adobe/Magento Composer credentials in your global `~/.ddev/homeadditions/.composer/auth.json` and never have to enter them again (see below):
+    
+        ??? "Script to store Adobe/Magento Composer credentials (click me)"
+            ```bash
+            # Enter your username/password and agree to store your credentials
+            ddev_dir="$(ddev version -j | docker run -i --rm ddev/ddev-utilities jq -r ".raw.\"global-ddev-dir\" | select (.!=null) // \"$HOME/.ddev\"" 2>/dev/null)"
+            mkdir -p $ddev_dir/homeadditions/.composer
+            docker_command=("docker" "run" "-it" "--rm" "-v" "$ddev_dir/homeadditions/.composer:/composer" "--workdir=/tmp" "-e" "COMPOSER_HOME=/composer" "--user" "$(id -u):$(id -g)")
+            auth_json_path="$ddev_dir/homeadditions/.composer/auth.json"
+            if [ -L "$auth_json_path" ]; then
+                # If auth.json is a symlink, add the optional mount
+                auth_json_dir=$(dirname "$(readlink -f "$auth_json_path")")
+                docker_command+=("-v" "$auth_json_dir:$auth_json_dir")
+            fi
+            image="$(ddev version -j | docker run -i --rm ddev/ddev-utilities jq -r ".raw.web | select (.!=null)" 2>/dev/null)"
+            docker_command+=("$image" "bash" "-c" "composer create --repository https://repo.magento.com/ magento/project-community-edition --no-install")
+            # Execute the command to store credentials
+            "${docker_command[@]}"
+            ```
 
     ```bash
     mkdir my-magento2-site && cd my-magento2-site
-    ddev config --project-type=magento2 --docroot=pub --disable-settings-management \
-    --upload-dirs=media --web-environment-add=COMPOSER_HOME="/var/www/html/.ddev/homeadditions/.composer"
-
+    ddev config --project-type=magento2 --docroot=pub --upload-dirs=media --disable-settings-management
     ddev get ddev/ddev-elasticsearch
     ddev start
-    ddev composer create --repository=https://repo.magento.com/ magento/project-community-edition
+    ddev composer create --repository https://repo.magento.com/ magento/project-community-edition
     rm -f app/etc/env.php
-    echo "/auth.json" >.ddev/homeadditions/.composer/.gitignore
 
     # Change the base-url below to your project's URL
     ddev magento setup:install --base-url="https://my-magento2-site.ddev.site/" \
@@ -440,7 +462,7 @@ The Laravel project type can be used for [StarterKits](https://laravel.com/docs/
     ddev magento deploy:mode:set developer
     ddev magento module:disable Magento_TwoFactorAuth Magento_AdminAdobeImsTwoFactorAuth
     ddev config --disable-settings-management=false
-    ddev php bin/magento info:adminuri
+    ddev magento info:adminuri
     # Append the URI returned by the previous command either to ddev launch, like for example ddev launch /admin_XXXXXXX, or just run ddev launch and append the URI to the path in the browser
     ddev launch
     ```
@@ -458,21 +480,20 @@ The Laravel project type can be used for [StarterKits](https://laravel.com/docs/
 
 === "OpenMage/Magento 1"
 
-    1. Download OpenMage from [release page](https://github.com/OpenMage/magento-lts/releases).
-    2. Make a directory for it, for example `mkdir ~/workspace/OpenMage` and change to the new directory `cd ~/workspace/OpenMage`.
-    3. Run [`ddev config`](../users/usage/commands.md#config) and accept the defaults.
-    4. Install sample data. (See below.)
-    5. Run [`ddev start`](../users/usage/commands.md#start).
-    6. Follow the URL to the base site.
+    ```bash
+    mkdir my-magento1-site && cd my-magento1-site
+    tag=$(curl -L "https://api.github.com/repos/OpenMage/magento-lts/releases/latest" | docker run -i --rm ddev/ddev-utilities jq -r .tag_name) && curl -L "https://github.com/OpenMage/magento-lts/releases/download/$tag/openmage-$tag.zip" -o openmage.zip
+    unzip ./openmage.zip && rm -f openmage.zip
+    ddev config --project-type=magento --web-environment-add=MAGE_IS_DEVELOPER_MODE=1
+    ddev start
+    # Install openmage and optionally install sample data
+    ddev openmage-install
+    ddev launch /admin
 
-    You may want the [Magento 1 Sample Data](https://github.com/Vinai/compressed-magento-sample-data) for experimentation:
-
-    * Download Magento [1.9.2.4 Sample Data](https://github.com/Vinai/compressed-magento-sample-data/raw/master/compressed-magento-sample-data-1.9.2.4.tgz).
-    * Extract the download:
-        `tar -zxf ~/Downloads/compressed-magento-sample-data-1.9.2.4.tgz --strip-components=1`
-    * Import the example database `magento_sample_data_for_1.9.2.4.sql` with `ddev import-db --file=magento_sample_data_for_1.9.2.4.sql` to database **before** running OpenMage install.
-
-    OpenMage is a huge codebase, and we recommend [using Mutagen for performance](install/performance.md#mutagen) on macOS and traditional Windows.
+    # Note that openmage itself provides several custom DDEV commands, including
+    # `openmage-install`, `openmage-admin`, `phpmd`, `rector`, `phpcbf`, `phpstan`, `vendor-patches`, 
+    # and `php-cs-fixer`.
+    ```
 
 ## Moodle
 

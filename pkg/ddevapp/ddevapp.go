@@ -358,11 +358,13 @@ func (app *DdevApp) Describe(short bool) (map[string]interface{}, error) {
 					continue
 				}
 
+				// If the HTTP port is 80 (default), it doesn't get included in URL
 				portDefault := "80"
 				attributeName := "http_url"
 				protocol := "http://"
 
 				if name == "HTTPS_EXPOSE" {
+					// If the HTTPS port is 443 (default), it doesn't get included in URL
 					portDefault = "443"
 					attributeName = "https_url"
 					protocol = "https://"
@@ -1473,14 +1475,13 @@ Fix with 'ddev config global --required-docker-compose-version="" --use-docker-c
 		util.Warning("Something is wrong with your Docker provider and /mnt/ddev_config is not mounted from the project .ddev folder. Your project cannot normally function successfully with this situation. Is your project in your home directory?")
 	}
 
-	if app.NodeJSVersion != nodeps.NodeJSDefault {
-		util.Debug(`checking nodejs_version: "%s" install for errors`, app.NodeJSVersion)
-		nInstallStderr, _, _ := app.Exec(&ExecOpts{
-			Cmd: "cat /tmp/n-install-stderr.txt 2>/dev/null || true",
-		})
-		if nInstallStderr != "" {
-			util.Warning("Unable to install nodejs_version: \"%s\".\nError output from `n install %s`:\n%s", app.NodeJSVersion, app.NodeJSVersion, nInstallStderr)
-		}
+	util.Debug("Getting stderr output from 'log-stderr.sh --show'")
+	logStderr, _, _ := app.Exec(&ExecOpts{
+		Cmd: "log-stderr.sh --show 2>/dev/null || true",
+	})
+	logStderr = strings.TrimSpace(logStderr)
+	if logStderr != "" {
+		util.Warning(logStderr)
 	}
 
 	if !IsRouterDisabled(app) {
@@ -1492,7 +1493,14 @@ Fix with 'ddev config global --required-docker-compose-version="" --use-docker-c
 	}
 
 	output.UserOut.Printf("Waiting for additional project containers to become ready...")
-	err = app.WaitByLabels(map[string]string{"com.ddev.site-name": app.GetName()})
+	waitLabels := map[string]string{"com.ddev.site-name": app.GetName()}
+	containersAwaited, err := dockerutil.FindContainersByLabels(waitLabels)
+	if err != nil {
+		return err
+	}
+	containerNames := dockerutil.GetContainerNames(containersAwaited)
+	output.UserOut.Printf("Waiting %ds for additional project containers %v to become ready...", app.GetMaxContainerWaitTime(), containerNames)
+	err = app.WaitByLabels(waitLabels)
 	if err != nil {
 		return err
 	}
@@ -2319,7 +2327,7 @@ func (app *DdevApp) WaitByLabels(labels map[string]string) error {
 	waitTime := app.GetMaxContainerWaitTime()
 	err := dockerutil.ContainersWait(waitTime, labels)
 	if err != nil {
-		return fmt.Errorf("container(s) failed to become healthy before their configured timeout or in %d seconds. This might be a problem with the healthcheck and not a functional problem. (%v)", waitTime, err)
+		return fmt.Errorf("container(s) failed to become healthy before their configured timeout or in %d seconds.\nThis might be a problem with the healthcheck and not a functional problem.\nThe error was '%v'", waitTime, err.Error())
 	}
 	return nil
 }
@@ -2686,6 +2694,7 @@ func (app *DdevApp) GetHTTPURL() string {
 	url := ""
 	if !IsRouterDisabled(app) {
 		url = "http://" + app.GetHostname()
+		// If the HTTP port is the default "80", it's not included in the URL
 		if app.GetRouterHTTPPort() != "80" {
 			url = url + ":" + app.GetRouterHTTPPort()
 		}
@@ -2701,6 +2710,7 @@ func (app *DdevApp) GetHTTPSURL() string {
 	if !IsRouterDisabled(app) {
 		url = "https://" + app.GetHostname()
 		p := app.GetRouterHTTPSPort()
+		// If the HTTPS port is 443 (default), it doesn't get included in URL
 		if p != "443" {
 			url = url + ":" + p
 		}
@@ -2735,6 +2745,7 @@ func (app *DdevApp) GetAllURLs() (httpURLs []string, httpsURLs []string, allURLs
 		if app.GetRouterHTTPPort() != "80" {
 			httpPort = ":" + app.GetRouterHTTPPort()
 		}
+		// If the HTTPS port is 443 (default), it doesn't get included in URL
 		if app.GetRouterHTTPSPort() != "443" {
 			httpsPort = ":" + app.GetRouterHTTPSPort()
 		}
