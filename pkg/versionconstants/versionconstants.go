@@ -11,22 +11,21 @@ var AmplitudeAPIKey = ""
 var WebImg = "ddev/ddev-webserver"
 
 // WebTag defines the default web image tag
-var WebTag = "20240723_stasadev_n_install_auto" // Note that this can be overridden by make
+var WebTag = "20241223_stasadev_build_warn" // Note that this can be overridden by make
 
 // DBImg defines the default db image used for applications.
 var DBImg = "ddev/ddev-dbserver"
 
 // BaseDBTag is the main tag, DBTag is constructed from it
-var BaseDBTag = "20240719_rfay_innodb_doublewrite"
+var BaseDBTag = "20241223_stasadev_build_warn"
 
-const TraditionalRouterImage = "ddev/ddev-nginx-proxy-router:v1.23.3"
-const TraefikRouterImage = "ddev/ddev-traefik-router:20240616_traefik_3"
+const TraefikRouterImage = "ddev/ddev-traefik-router:v1.24.1"
 
 // SSHAuthImage is image for agent
 var SSHAuthImage = "ddev/ddev-ssh-agent"
 
 // SSHAuthTag is ssh-agent auth tag
-var SSHAuthTag = "v1.23.3"
+var SSHAuthTag = "20241223_stasadev_build_warn"
 
 // BusyboxImage is used a couple of places for a quick-pull
 var BusyboxImage = "busybox:stable"
@@ -40,9 +39,6 @@ var BUILDINFO = "BUILDINFO should have new info"
 // MutagenVersion is filled with the version we find for Mutagen in use
 var MutagenVersion = ""
 
-const RequiredMutagenVersion = "0.17.2"
+const RequiredMutagenVersion = "0.18.0"
 
-const RequiredDockerComposeVersionDefault = "v2.29.0"
-
-// Drupal11RequiredSqlite3Version for ddev-webserver
-const Drupal11RequiredSqlite3Version = "3.45.1"
+const RequiredDockerComposeVersionDefault = "v2.31.0"

@@ -88,11 +88,10 @@ extra:
   - icon: fontawesome/brands/github
     link: https://github.com/ddev/ddev
   - icon: fontawesome/brands/discord
-    link: https://discord.gg/5wjP76mBJD
+    link: https://ddev.com/s/discord
   - icon: fontawesome/brands/stack-overflow
     link: https://stackoverflow.com/tags/ddev
-  - icon: fontawesome/brands/twitter
-    link: https://twitter.com/search?q=%23ddev&src=unknown&f=live
+
   generator: false
   analytics:
     provider: plausible
@@ -137,6 +136,10 @@ markdown_extensions:
 - pymdownx.superfences:
 - pymdownx.tabbed:
     alternate_style: true
+    combine_header_slug: true
+    slugify: !!python/object/apply:pymdownx.slugs.slugify
+      kwds:
+        case: lower
 - pymdownx.tasklist:
     custom_checkbox: true
 - pymdownx.tilde
@@ -180,7 +183,6 @@ nav:
     - users/extend/database-types.md
     - users/configuration/hooks.md
     - users/extend/additional-hostnames.md
-    - users/configuration/experimental.md
   - 'Extending':
     - users/extend/customization-extendibility.md
     - users/extend/additional-services.md
@@ -220,3 +222,4 @@ nav:
       - developers/writing-style-guide.md
       - developers/remote-config.md
       - developers/maintainers.md
+      - developers/secret-management.md

@@ -50,7 +50,7 @@ You can run commands in custom containers as well as standard DDEV `web` and `db
 For example, to add a `solrtail` command that runs in a Solr service, add `.ddev/commands/solr/solrtail` with:
 
 ```bash
-#!/bin/bash
+#!/usr/bin/env bash
 
 ## Description: Tail the main solr log
 ## Usage: solrtail
@@ -114,7 +114,7 @@ A number of environment variables are provided to these command scripts. These a
 * `DDEV_SITENAME`: Project name, like `d8composer`
 * `DDEV_TLD`: Top-level project domain, like `ddev.site`
 * `DDEV_UID`: The UID the web container runs as
-* `DDEV_WEBSERVER_TYPE`: `nginx-fpm`, `apache-fpm`, or `nginx-gunicorn`
+* `DDEV_WEBSERVER_TYPE`: `nginx-fpm` or `apache-fpm`
 * `GOARCH`: Architecture (`arm64`, `amd64`)
 * `GOOS`: Operating system (`windows`, `darwin`, `linux`)
 
@@ -133,7 +133,7 @@ Useful variables for container scripts are:
 * `DDEV_ROUTER_HTTPS_PORT`: Router port for HTTPS
 * `DDEV_SITENAME`: Project name, like `d8composer`
 * `DDEV_TLD`: Top-level project domain, like `ddev.site`
-* `DDEV_WEBSERVER_TYPE`: `nginx-fpm`, `apache-fpm`, or `nginx-gunicorn`
+* `DDEV_WEBSERVER_TYPE`: `nginx-fpm` or `apache-fpm`
 * `IS_DDEV_PROJECT`: If `true`, PHP is running under DDEV
 
 ## Annotations Supported
@@ -163,6 +163,14 @@ Example: `## Usage: commandname [flags] [args]`
 Usage: `## Example: <command-example>`
 
 Example: `## Example: commandname\ncommandname -h`
+
+### `Aliases` Annotation
+
+If your command should have one or more aliases, add the `Aliases` annotation. Multiple aliases are separated by a comma:
+
+Usage: `## Aliases: <list-of-aliases>`
+
+Example: `## Aliases: cacheclear,cache-clear,cache:clear`
 
 ### `Flags` Annotation
 

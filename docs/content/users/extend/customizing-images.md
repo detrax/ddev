@@ -77,6 +77,17 @@ RUN chmod 666 /etc/php/${DDEV_PHP_VERSION}/mods-available/xdebug.ini
 #RUN phpenmod ${extension}
 ```
 
+## Adding Locales
+
+The web image ships by default with a small number of locales, which work for most usages, including
+`en_CA`, `en_US`, `en_GB`, `es_ES`, `es_MX`, `pt_BR`, `pt_PT`, `de_DE`, `de_AT`, `fr_CA`, `fr_FR`, `ja_JP`, and `ru_RU`.
+
+If you need other locales, you can install all of them by adding `locales-all` to your `webimage_extra_packages`. For example, in `.ddev/config.yaml`:
+
+```yaml
+webimage_extra_packages: [locales-all]
+```
+
 ## Adding Extra Dockerfiles for `webimage` and `dbimage`
 
 For more complex requirements, you can add:
@@ -91,13 +102,15 @@ These files’ content will be inserted into the constructed Dockerfile for each
 For certain use cases, you might need to add directives very early on the Dockerfile like proxy settings or SSL termination. You can use `pre.` variants for this that are inserted *before* everything else:
 
 * `.ddev/web-build/pre.Dockerfile.*`
+* `.ddev/web-build/pre.Dockerfile`
 * `.ddev/db-build/pre.Dockerfile.*`
+* `.ddev/db-build/pre.Dockerfile`
 
-Examine the resultant generated Dockerfile (which you will never edit directly), at `.ddev/.webimageBuild/Dockerfile`. You can force a rebuild with [`ddev debug refresh`](../usage/commands.md#debug-refresh).
+Examine the resultant generated Dockerfile (which you will never edit directly), at `.ddev/.webimageBuild/Dockerfile`. You can force a rebuild with [`ddev debug rebuild`](../usage/commands.md#debug-rebuild).
 
 Examples of possible Dockerfiles are `.ddev/web-build/Dockerfile.example` and `.ddev/db-build/Dockerfile.example`, created in your project when you run [`ddev config`](../usage/commands.md#config).
 
-You can use the `.ddev/*-build` directory as the Docker “context” directory as well. So for example, if a file named `README.txt` exists in `.ddev/web-build`, you can use `ADD README.txt /` in the Dockerfile.
+You can use the `.ddev/*-build` directory as the Docker “context” directory as well. So for example, if a file named `file.txt` exists in `.ddev/web-build`, you can use `ADD file.txt /` in the Dockerfile.
 
 An example web image `.ddev/web-build/Dockerfile` might be:
 
@@ -135,7 +148,7 @@ ENV COMPOSER_HOME=""
 
 The following environment variables are available for the web Dockerfile to use at build time:
 
-* `$BASE_IMAGE`: the base image, like `ddev/ddev-webserver:v1.23.3`
+* `$BASE_IMAGE`: the base image, like `ddev/ddev-webserver:v1.24.0`
 * `$username`: the username inferred from your host-side username
 * `$uid`: the user ID inferred from your host-side user ID
 * `$gid`: the group ID inferred from your host-side group ID
@@ -167,6 +180,18 @@ An example of using `$TARGETARCH` would be:
 RUN curl --fail -JL -s -o /usr/local/bin/mkcert "https://dl.filippo.io/mkcert/latest?for=linux/${TARGETARCH}"
 ```
 
+## Adding EOL Versions of PHP
+
+If your project requires multiple versions of PHP—such as using PHP 8.3 but also needing an older, unsupported, unmaintained version like PHP 7.4 for specific scripts—and you don’t want to fully switch to PHP 7.4 with `ddev config --php-version=7.4`, you can install it using the `pre.Dockerfile.*` technique from the previous section.
+
+Create a `.ddev/web-build/pre.Dockerfile.php7.4` file with the following content:
+
+```dockerfile
+RUN /usr/local/bin/install_php_extensions.sh "php7.4" "${TARGETARCH}"
+```
+
+After restarting the project, you can use PHP 7.4 with the command `ddev exec php7.4 -v`.
+
 ## Installing into the home directory
 
 The in-container home directory is rebuilt when you run `ddev restart`, so if you have something that installs into the home directory (like `~/.cache`) you'll want to switch users in the Dockerfile. In this example, `npx playwright install` installs a number of things into `~/.cache`, so we'll switch to the proper user before executing it, and switch back to the `root` user after installation to avoid surprises with any other Dockerfile that may follow.
@@ -187,4 +212,4 @@ It can be complicated to figure out what’s going on when building a Dockerfile
 
 1. Use [`ddev ssh`](../usage/commands.md#ssh) first of all to pioneer the steps you want to take. You can do all the things you need to do there and see if it works. If you’re doing something that affects PHP, you may need to `sudo killall -USR2 php-fpm` for it to take effect.
 2. Put the steps you pioneered into `.ddev/web-build/Dockerfile` as above.
-3. If you can’t figure out what’s failing or why, running `ddev debug refresh` will show the full output of the build process. You can also run `export DDEV_VERBOSE=true && ddev start` to see what’s happening during the `ddev start` Dockerfile build.
+3. If you can’t figure out what’s failing or why, running `ddev debug rebuild` will show the full output of the build process. You can also run `export DDEV_VERBOSE=true && ddev start` to see what’s happening during the `ddev start` Dockerfile build.

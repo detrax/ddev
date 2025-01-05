@@ -174,7 +174,7 @@ func ListAvailableAddons(officialOnly bool) ([]*github.Repository, error) {
 			if resp != nil {
 				msg = msg + fmt.Sprintf(" rateinfo=%v", resp.Rate)
 			}
-			return nil, fmt.Errorf(msg)
+			return nil, fmt.Errorf("%s", msg)
 		}
 		allRepos = append(allRepos, repos.Repositories...)
 		if resp.NextPage == 0 {
@@ -211,7 +211,7 @@ func RemoveAddon(app *DdevApp, addonName string, dict map[string]interface{}, ba
 	var ok bool
 
 	if manifestData, ok = manifests[addonName]; !ok {
-		util.Failed("The add-on '%s' does not seem to have a manifest file; please upgrade it.\nUse `ddev get --installed to see installed add-ons.\nIf yours is not there it may have been installed before DDEV v1.22.0.\nUse 'ddev get' to update it.", addonName)
+		util.Failed("The add-on '%s' does not seem to have a manifest file; please upgrade it.\nUse `ddev add-on list --installed` to see installed add-ons.\n", addonName)
 	}
 
 	// Execute any removal actions
@@ -271,7 +271,7 @@ func GatherAllManifests(app *DdevApp) (map[string]AddonManifest, error) {
 		return nil, err
 	}
 
-	dirs, err := fileutil.ListFilesInDirFullPath(metadataDir)
+	dirs, err := fileutil.ListFilesInDirFullPath(metadataDir, false)
 	if err != nil {
 		return nil, err
 	}

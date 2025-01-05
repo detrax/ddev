@@ -3,6 +3,8 @@
 # Runs on master and PRs, including forked PRs
 
   - command: ".buildkite/test.sh"
+    if: |
+      build.message !~ /\[(skip ci|skip buildkite)\]/
     agents:
       - "os=macos"
       - "colima=true"
@@ -15,4 +17,5 @@
       DDEV_TEST_SHARE_CMD: "false"
       DDEV_RUN_GET_TESTS: "false"
       DOCKER_TYPE: "colima_vz"
+      LIMA_SSH_PORT_FORWARDER: "true"
     parallelism: 1

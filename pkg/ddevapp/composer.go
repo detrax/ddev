@@ -2,11 +2,10 @@ package ddevapp
 
 import (
 	"fmt"
-	"os"
-	"runtime"
-
 	"github.com/ddev/ddev/pkg/fileutil"
 	"github.com/mattn/go-isatty"
+	"os"
+	"runtime"
 )
 
 // Composer runs Composer commands in the web container, managing pre- and post- hooks

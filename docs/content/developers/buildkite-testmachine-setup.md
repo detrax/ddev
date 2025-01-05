@@ -53,31 +53,23 @@ We are using [Buildkite](https://buildkite.com/ddev) for Windows and macOS testi
 8. `curl -fsSL https://keys.openpgp.org/vks/v1/by-fingerprint/32A37959C2FA5C3C99EFBC32A79206696452D198 | sudo gpg --dearmor -o /usr/share/keyrings/buildkite-agent-archive-keyring.gpg`
 9. `echo "deb [signed-by=/usr/share/keyrings/buildkite-agent-archive-keyring.gpg] https://apt.buildkite.com/buildkite-agent stable main" | sudo tee /etc/apt/sources.list.d/buildkite-agent.list`
 10. `sudo apt-get update && sudo apt-get install -y buildkite-agent`
-11. `buildkite-agent` should have home directory `/var/lib/buildkite-agent`: `sudo usermod -d /var/lib/buildkite-agent buildkite-agent`
+11. Change `buildkite-agent` home directory to `/var/lib/buildkite-agent`: `sudo usermod -d /var/lib/buildkite-agent buildkite-agent`
 12. Configure buildkite agent in /etc/buildkite-agent:
      * `tags="os=wsl2,architecture=amd64,dockertype=dockerforwindows"`
      * token="xxx"
 13. `sudo systemctl enable buildkite-agent && sudo systemctl start buildkite-agent`
-14. In PowerShell: `wsl.exe --update`. Watch for the escalation to complete, it does require escalation.
+14. In PowerShell: `wsl.exe --update`. Watch for the escalation to complete, it may require escalation.
 15. Open WSL2 and check out [ddev/ddev](https://github.com/ddev/ddev).
-16. Install Homebrew: `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"`
-17. Configure brew in PATH with:
-
-     ```
-     echo 'export PATH="/snap/bin:/home/linuxbrew/.linuxbrew/bin:$PATH"' >>~/.bashrc
-     source ~/.bashrc
-     ```
-
-18. As root user (`sudo -s`), add sudo capability with `echo "ALL ALL=NOPASSWD: ALL" >/etc/sudoers.d/all && chmod 440 /etc/sudoers.d/all`.
-19. `git config --global --add safe.directory '*'`
-20. `echo "capath=/etc/ssl/certs/" >>~/.curlrc`
-21. `nc.exe -L -p 9003` on Windows to trigger and allow Windows Defender.
-22. Run `ngrok authtoken <token>` with token for free account.
-23. Install [winaero tweaker](https://winaero.com/request.php?1796) and “Enable user autologin checkbox”. Set up the machine to [automatically log in on boot](https://www.cnet.com/how-to/automatically-log-in-to-your-windows-10-pc/).  Then run netplwiz, provide the password for the main user, uncheck “require a password to log in”.
-24. In “Advanced Windows Update Settings” enable “Receive updates for other Microsoft products” to make sure you get WSL2 kernel upgrades. Make sure to run Windows Update to get the latest kernel.
-25. Turn off the `System` -> `Notifications` -> `Additional settings` that cause the "Windows experience" prompts after upgrades:
+16. As root user (`sudo -s`), add sudo capability with `echo "ALL ALL=NOPASSWD: ALL" >/etc/sudoers.d/all && chmod 440 /etc/sudoers.d/all`.
+17. `git config --global --add safe.directory '*'`
+18. `echo "capath=/etc/ssl/certs/" >>~/.curlrc`
+19. `nc.exe -L -p 9003` on Windows to trigger and allow Windows Defender.
+20. Run `ngrok authtoken <token>` with token for free account.
+21. Install [winaero tweaker](https://winaero.com/request.php?1796) and “Enable user autologin checkbox”. Set up the machine to [automatically log in on boot](https://www.cnet.com/how-to/automatically-log-in-to-your-windows-10-pc/).  Then run netplwiz, provide the password for the main user, uncheck “require a password to log in”.
+22. In “Advanced Windows Update Settings” enable “Receive updates for other Microsoft products” to make sure you get WSL2 kernel upgrades. Make sure to run Windows Update to get the latest kernel.
+23. Turn off the `System` -> `Notifications` -> `Additional settings` that cause the "Windows experience" prompts after upgrades:
     ![disable_windows_experience](../images/disable_windows_experience.png)
-26. Edit the `~/.wslconfig` on Windows to add appropriate WSL2 memory allocation and `autoMemoryReclaim`
+24. Edit the `~/.wslconfig` on Windows to add appropriate WSL2 memory allocation and `autoMemoryReclaim`
 
     ```
     memory=12GB
@@ -138,7 +130,7 @@ We are using [Buildkite](https://buildkite.com/ddev) for Windows and macOS testi
 10. `sudo mkdir -p /usr/local/bin && sudo chown -R testbot /usr/local/bin`
 11. Install [Homebrew](https://brew.sh/) `/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"`
 12. After installing Homebrew follow the instructions it gives you at the end to add brew to your PATH.
-13. Install everything you’ll need with `brew install buildkite/buildkite/buildkite-agent bats-core composer ddev/ddev/ddev git golang jq mysql-client mkcert netcat p7zip  && brew install --cask docker iterm2 ngrok && brew link --force mysql-client`.
+13. Install everything you’ll need with `brew install buildkite/buildkite/buildkite-agent bats-core composer ddev/ddev/ddev git golang jq mysql-client@8.0 mkcert netcat p7zip  && brew install --cask docker iterm2 ngrok && brew link --force mysql-client`.
 14. Run `ngrok authtoken <token>` with token for free account from 1Password.
 15. Run `mkcert -install`.
 16. If Docker Desktop will be deployed, run Docker manually and go through its configuration routine.
@@ -168,6 +160,8 @@ We are using [Buildkite](https://buildkite.com/ddev) for Windows and macOS testi
     PATH=$PATH:/usr/local/bin:/opt/homebrew/bin
     ```
 
+30. In macOS Settings visit "full disk access" and grant access to `buildkite-agent`, `docker`, `iterm`, `orbstack`. This may prevent startup modal dialogs that prevent `buildkite-agent` or `docker` from continuing properly.
+
 ## Additional Colima macOS setup
 
 1. `brew install colima`
@@ -178,9 +172,9 @@ We are using [Buildkite](https://buildkite.com/ddev) for Windows and macOS testi
 
 Then the Buildkite agent must be configured with tags `colima=true` and `colima_vz=true`.
 
-## Additional Lima macOS setup (not yet working)
+## Additional Lima macOS setup
 
-1. `limactl create --name=lima-vz --vm-type=vz --mount-type=virtiofs --mount="~/:w" --memory=6 --cpus=4 --disk=100 template://docker`
+1. `limactl create --name=lima-vz --vm-type=vz --mount-type=virtiofs --mount-writable --mount="~/:w" --memory=6 --cpus=4 --disk=100 template://docker`
 2. `limactl start lima-vz`
 3. `docker context use lima-lima-vz`
 

@@ -13,25 +13,40 @@ You can set custom environment variables in several places:
 
 1. An optional, project-level `.ddev/.env` file provides environment variables to all DDEV containers, including any additional services or add-ons. It can look something like this:
 
-    ```
-    MY_ENV_VAR='someval'
-    MY_OTHER_ENV_VAR='someotherval'
+    ```dotenv
+    MY_ENV_VAR="someval"
+    MY_OTHER_ENV_VAR="someotherval"
     ```
 
-2. The global `web_environment` setting in `.ddev/global_config.yaml`.
+2. With DDEV v1.23.5+, an optional, project-level `.ddev/env.*` file (where `*` is a service name, like `web`, `db`, `redis`, etc.) provides environment variables to specific services or add-ons. For example, `.ddev/.env.redis` file can look something like this:
+
+    ```dotenv
+    REDIS_TAG="7-bookworm"
+    REDIS_FOO="bar"
+    ```
+
+    Use the [`ddev dotenv set`](../usage/commands.md#dotenv-set) command to set environment variables from command line:
+
+    ```bash
+    ddev dotenv set .ddev/.env.redis --redis-tag 7-bookworm --redis-foo bar
+    ```
+
+    If variables should be expanded only in `.ddev/docker-compose.*.yaml` files, use a different filename, for example, `.ddev/.env.redis-build`.
+
+3. The global `web_environment` setting in `.ddev/global_config.yaml`.
 
     ```yaml
     web_environment:
-    - MY_ENV_VAR=someval
-    - MY_OTHER_ENV_VAR=someotherval
+        - MY_ENV_VAR=someval
+        - MY_OTHER_ENV_VAR=someotherval
     ```
 
-3. The project’s [`web_environment`](../configuration/config.md#web_environment) setting in `.ddev/config.yaml` or `.ddev/config.*.yaml`:
+4. The project’s [`web_environment`](../configuration/config.md#web_environment) setting in `.ddev/config.yaml` or `.ddev/config.*.yaml`:
 
     ```yaml
     web_environment:
-    - MY_ENV_VAR=someval
-    - MY_OTHER_ENV_VAR=someotherval
+        - MY_ENV_VAR=someval
+        - MY_OTHER_ENV_VAR=someotherval
     ```
 
 If you’d rather use the CLI to set the project or global `web_environment` value, you can use the [`ddev config`](../usage/commands.md#config) command:
@@ -66,11 +81,13 @@ export PATH=$PATH:/var/www/html/somewhereelse/vendor/bin
 
 ## Changing PHP Version
 
-The project's `.ddev/config.yaml` file defines the PHP version to use. The [`php_version`](../configuration/config.md#php_version) can be changed to `5.6`, `7.0`, `7.1`, `7.2`,  `7.3`, `7.4`, `8.0`, `8.1`, `8.2`, '8.3', or `8.4`.
+The project's `.ddev/config.yaml` file defines the PHP version to use. The [`php_version`](../configuration/config.md#php_version) can be `5.6` through `8.4`, and new versions are added when they are released by the PHP Foundation.
 
 ### Older Versions of PHP
 
-[Support for older versions of PHP is available on ddev-contrib](https://github.com/ddev/ddev-contrib/blob/master/docker-compose-services/old_php) via [custom docker-compose files](custom-compose-files.md).
+[Support for older versions of PHP (< 5.6) is available on ddev-contrib](https://github.com/ddev/ddev-contrib/blob/master/docker-compose-services/old_php) via [custom docker-compose files](custom-compose-files.md).
+
+If your project requires multiple versions of PHP, and one of them is EOL, you can install it using [this technique](customizing-images.md#adding-eol-versions-of-php).
 
 ## Changing Web Server Type
 
@@ -96,7 +113,7 @@ There are many ways to deploy Node.js in any project, so DDEV tries to let you s
 * You can manually run Node.js scripts using [`ddev exec <script>`](../usage/commands.md#exec) or `ddev exec node <script>`.
 
 !!!tip "Please share your techniques!"
-    There are several ways to share your favorite Node.js tips and techniques. Best are [ddev-get add-ons](additional-services.md), [Stack Overflow](https://stackoverflow.com/tags/ddev), and [ddev-contrib](https://github.com/ddev/ddev-contrib).
+    There are several ways to share your favorite Node.js tips and techniques. Best are [ddev-get add-ons](additional-services.md) and [Stack Overflow](https://stackoverflow.com/tags/ddev).
 
 ## Running Extra Daemons in the Web Container
 
@@ -303,7 +320,7 @@ router_http_port: 8080
 
 Extra `config.*.yaml` files are loaded in lexicographic order, so `config.a.yaml` will be overridden by `config.b.yaml`.
 
-Team members may choose to use `config.local.yaml` for local non-committed config changes, for example. `config.local.yaml` is gitignored by default.
+Team members may choose to use `config.local.yaml` for local non-committed config changes, for example. `config.local.yaml` and `config.*.local.yaml` are gitignored by default.
 
 `config.*.yaml` update configuration according to these rules:
 

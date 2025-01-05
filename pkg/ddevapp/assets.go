@@ -7,6 +7,7 @@ import (
 
 	"github.com/ddev/ddev/pkg/fileutil"
 	"github.com/ddev/ddev/pkg/globalconfig"
+	"github.com/ddev/ddev/pkg/nodeps"
 	"github.com/ddev/ddev/pkg/util"
 )
 
@@ -14,6 +15,7 @@ import (
 // And the global .ddev assets are in directory global_dotddev_assets
 //
 //go:embed dotddev_assets/* dotddev_assets/commands/.gitattributes
+//go:embed mysql_config_assets/*
 //go:embed global_dotddev_assets/* global_dotddev_assets/.gitignore global_dotddev_assets/commands/.gitattributes
 //go:embed app_compose_template.yaml
 //go:embed router_compose_template.yaml
@@ -21,8 +23,6 @@ import (
 //go:embed traefik_config_template.yaml
 //go:embed traefik_static_config_template.yaml
 //go:embed traefik_global_config_template.yaml
-//go:embed router_Dockerfile_template
-//go:embed django4/*
 //go:embed drupal/*
 //go:embed magento/*
 //go:embed wordpress/*
@@ -45,6 +45,12 @@ func PopulateExamplesCommandsHomeadditions(appName string) error {
 		return err
 	}
 
+	// We don't want to populate the project's .ddev directory
+	// unless the project name is explicitly specified.
+	if appName == "" {
+		return nil
+	}
+
 	app, err := GetActiveApp(appName)
 	// If we have an error from GetActiveApp, it means we're not in a project directory
 	// That is not an error. It means we can not do this work, so return nil.
@@ -55,6 +61,14 @@ func PopulateExamplesCommandsHomeadditions(appName string) error {
 	err = fileutil.CopyEmbedAssets(bundledAssets, "dotddev_assets", app.GetConfigPath(""), GetInstalledAddonProjectFiles(app))
 	if err != nil {
 		return err
+	}
+
+	// Provide .ddev/mysql README and example by default
+	if app.Database.Type == nodeps.MySQL || app.Database.Type == nodeps.MariaDB {
+		err = fileutil.CopyEmbedAssets(bundledAssets, "mysql_config_assets", app.GetConfigPath("mysql"), nil)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil

@@ -45,8 +45,11 @@ services:
       com.ddev.approot: $DDEV_APPROOT
     environment:
       - COLUMNS
+      - BITNAMI_VOLUME_DIR={{ .BitnamiVolumeDir }}
       - DDEV_DATABASE
       - DDEV_DATABASE_FAMILY
+      - DDEV_GOARCH
+      - DDEV_GOOS
       - DDEV_HOSTNAME
       - DDEV_PHP_VERSION
       - DDEV_PRIMARY_URL
@@ -57,8 +60,6 @@ services:
       - DDEV_SITENAME
       - DDEV_TLD
       - DOCKER_IP={{ .DockerIP }}
-      - GOARCH
-      - GOOS
       - HOST_DOCKER_INTERNAL_IP={{ .HostDockerInternalIP }}
       - IS_DDEV_PROJECT=true
       - LINES
@@ -71,6 +72,7 @@ services:
       - POSTGRES_PASSWORD=db
       - POSTGRES_USER=db
       - POSTGRES_DB=db
+      - PAGER=less -SFX
       - TZ={{ .Timezone }}
       - USER={{ .Username }}
     command: ${DDEV_DB_CONTAINER_COMMAND}
@@ -100,9 +102,6 @@ services:
         DDEV_DATABASE: ${DDEV_DATABASE}
     image: ${DDEV_WEBIMAGE}-${DDEV_SITENAME}-built
     command: /pre-start.sh
-    {{ if .EnvFile }}
-    env_file: '{{ .EnvFile }}'
-    {{ end }}
 
     networks: ["default", "ddev_default"]
     cap_add:
@@ -144,7 +143,7 @@ services:
       - ddev-config:/mnt/ddev_config
       {{- else }}
       - .:/mnt/ddev_config:ro
-      - ./xhprof:/usr/local/bin/xhprof:ro
+      - ./xhprof:/usr/local/bin/xhprof:rw
         {{- if .MutagenEnabled }}
           {{- range $uploadDirMap := .UploadDirsMap}}
       - {{ $uploadDirMap }}:rw
@@ -178,6 +177,8 @@ services:
     - DDEV_DATABASE
     - DDEV_DOCROOT
     - DDEV_DATABASE_FAMILY
+    - DDEV_GOARCH
+    - DDEV_GOOS
     - DDEV_HOSTNAME
     - DDEV_MUTAGEN_ENABLED
     - DDEV_PHP_VERSION
@@ -198,10 +199,7 @@ services:
     {{ if not .DisableSettingsManagement }}
     - DRUSH_OPTIONS_URI=$DDEV_PRIMARY_URL
     {{ end }}
-    - DRUSH_ALLOW_XDEBUG=1
     - DOCKER_IP={{ .DockerIP }}
-    - GOARCH
-    - GOOS
     - HOST_DOCKER_INTERNAL_IP={{ .HostDockerInternalIP }}
     # HTTP_EXPOSE allows for ports accepting HTTP traffic to be accessible from <site>.ddev.site:<port>
     # To expose a container port to a different host port, define the port as hostPort:containerPort
@@ -215,6 +213,7 @@ services:
     - MYSQL_PWD=db
     - NODE_EXTRA_CA_CERTS=/mnt/ddev-global-cache/mkcert/rootCA.pem
     - npm_config_cache=/mnt/ddev-global-cache/npm
+    - PAGER=less -SFX
     - PGDATABASE=db
     - PGHOST=db
     - PGPASSWORD=db
@@ -224,6 +223,7 @@ services:
     - TZ={{ .Timezone }}
     - USER={{ .Username }}
     - VIRTUAL_HOST=${DDEV_HOSTNAME}
+    - START_SCRIPT_TIMEOUT={{ .StartScriptTimeout }}
     {{ range $env := .WebEnvironment }}- "{{ $env }}"
     {{ end }}
     labels:

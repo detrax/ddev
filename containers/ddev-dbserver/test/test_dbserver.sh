@@ -1,7 +1,8 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Find the directory of this script
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null && pwd)"
+export TEST_SCRIPT_DIR=${DIR}/../../testscripts
 
 set -o errexit
 set -o pipefail

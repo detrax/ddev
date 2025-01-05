@@ -1,6 +1,6 @@
 # CMS Quickstarts
 
-DDEV is [ready to go](./project.md) with generic project types for PHP and Python frameworks, and more specific project types for working with popular platforms and CMSes. To learn more about how to manage projects in DDEV visit [Managing Projects](../users/usage/managing-projects.md).
+DDEV is [ready to go](./project.md) with generic project types for PHP frameworks, and more specific project types for working with popular platforms and CMSes. To learn more about how to manage projects in DDEV visit [Managing Projects](../users/usage/managing-projects.md).
 
 Before proceeding, make sure your installation of DDEV is up to date. In a new and empty project folder, using your favorite shell, run the following commands:
 
@@ -13,7 +13,7 @@ To get started with [Backdrop](https://backdropcms.org), clone the project repos
     ```bash
     mkdir my-backdrop-site && cd my-backdrop-site
     curl -LJO https://github.com/backdrop/backdrop/releases/latest/download/backdrop.zip
-    unzip ./backdrop.zip && rm backdrop.zip && mv -f ./backdrop/{.,}* . && rm -r backdrop
+    unzip ./backdrop.zip && rm -f backdrop.zip && mv -f ./backdrop/{.,}* . ; rm -rf backdrop
     ddev config --project-type=backdrop
     ddev start
     ddev launch
@@ -26,18 +26,24 @@ To get started with [Backdrop](https://backdropcms.org), clone the project repos
 
     ```bash
     # Clone an existing repository (or navigate to a local project directory):
-    git clone https://github.com/example/example-site my-backdrop-site
+    # Set PROJECT_GIT_URL to your project's git URL.
+    PROJECT_GIT_URL=https://github.com/ddev/test-backdrop.git
+    git clone ${PROJECT_GIT_URL} my-backdrop-site
     cd my-backdrop-site
 
     # Set up the DDEV environment:
     ddev config --project-type=backdrop
 
-    # Boot the project and install Composer packages (if required):
+    # Start the project
     ddev start
-    ddev composer install
 
-    # Import a database backup and open the site in your browser:
+    # Import a database backup:
     ddev import-db --file=/path/to/db.sql.gz
+
+    # Import files backup
+    ddev import-files --source=/path/to/files.tar.gz
+
+    # open the site in your browser
     ddev launch
     ```
 
@@ -69,6 +75,79 @@ Please note that you will need to change the PHP version to 7.4 to be able to wo
     ddev cake
     ddev launch
     ```
+
+## CiviCRM (Standalone)
+
+[CiviCRM Standalone](https://civicrm.org/blog/ufundo/next-steps-civicrm-standalone) allows running [CiviCRM](https://civicrm.org/) without a CMS. Visit [Install CiviCRM (Standalone)](https://docs.civicrm.org/installation/en/latest/standalone) for more installation details.
+
+```bash
+mkdir my-civicrm-site && cd my-civicrm-site
+ddev config --project-type=php --composer-root=core --upload-dirs=public/media
+ddev start
+ddev exec "curl -LsS https://download.civicrm.org/latest/civicrm-STABLE-standalone.tar.gz -o /tmp/civicrm-standalone.tar.gz"
+ddev exec "tar --strip-components=1 -xzf /tmp/civicrm-standalone.tar.gz"
+ddev composer require civicrm/cli-tools --no-scripts
+# You can now install CiviCRM manually in your browser using `ddev launch`
+# and selecting `db` for the server and `db` for database/username/password
+# or do the same automatically using the command below:
+# The parameter `-m loadGenerated=1` includes sample data
+ddev exec cv core:install \
+    --cms-base-url='$DDEV_PRIMARY_URL' \
+    --db=mysql://db:db@db/db \
+    -m loadGenerated=1 \
+    -m extras.adminUser=admin \
+    -m extras.adminPass=admin \
+    -m extras.adminEmail=admin@example.com
+ddev launch
+```
+
+## Contao
+
+Further information on the DDEV procedure can also be found in the [Contao documentation](https://docs.contao.org/manual/en/guides/local-installation/ddev/).
+
+=== "Composer"
+
+    ```bash
+    mkdir my-contao-site && cd my-contao-site
+    ddev config --project-type=php --docroot=public --webserver-type=apache-fpm --php-version=8.2
+    ddev composer create contao/managed-edition:5.3
+
+    # Set DATABASE_URL and MAILER_DSN in .env.local
+    ddev dotenv set .env.local --database-url=mysql://db:db@db:3306/db --mailer-dsn=smtp://localhost:1025
+
+    # Create the database
+    ddev exec contao-console contao:migrate --no-interaction
+
+    # Create backend user
+    ddev exec contao-console contao:user:create --username=admin --name=Administrator --email=admin@example.com --language=en --password=Password123 --admin
+
+    # Access the administration area
+    ddev launch contao
+    ```
+
+=== "Contao Manager"
+
+    Like most PHP projects, Contao could be installed and updated with Composer. The [Contao Manager](https://docs.contao.org/manual/en/installation/contao-manager/) is a tool that provides a graphical user interface to manage a Contao installation.
+
+    ```bash
+    mkdir my-contao-site && cd my-contao-site
+    ddev config --project-type=php --docroot=public --webserver-type=apache-fpm --php-version=8.2
+
+    # set DATABASE_URL and MAILER_DSN in .env.local
+    ddev dotenv set .env.local --database-url=mysql://db:db@db:3306/db --mailer-dsn=smtp://localhost:1025
+
+    # Download the Contao Manager
+    ddev start
+    ddev exec "wget -O public/contao-manager.phar.php https://download.contao.org/contao-manager/stable/contao-manager.phar"
+
+    # Follow the further steps within the Contao Manager
+    ddev launch contao-manager.phar.php
+    ```
+
+=== "Demo Website"
+
+    The [Contao demo website](https://demo.contao.org/) is maintained for the currently supported Contao versions and can be [optionally installed](https://github.com/contao/contao-demo).
+    Via the Contao Manager you can simply select this option during the first installation.
 
 ## Craft CMS
 
@@ -131,68 +210,48 @@ Read more about customizing the environment and persisting configuration in [Pro
 !!!tip "Installing Craft"
     Read more about installing Craft in the [official documentation](https://craftcms.com/docs).
 
-## Django 4 (Experimental)
-
-```bash
-git clone https://github.com/example/my-django-site
-cd my-django-site
-ddev config # Follow the prompts
-# If your settings file is not `settings.py` you must add a DJANGO_SETTINGS_MODULE
-ddev config --web-environment-add=DJANGO_SETTINGS_MODULE=<myapp.settings.local>
-ddev start
-# If your app requires setup, do it here:
-# ddev python manage.py migrate
-ddev launch
-```
-
-* DDEV will install everything in your `requirements.txt` or `pyproject.toml` into a `venv`. This takes a little while on first startup.
-* DDEV appends a stanza to your settings file which includes the DDEV settings only if running in DDEV context.
-* You can watch the `pip install` in real time on that first slow startup with `ddev logs -f` in another window.
-* If your `requirements.txt` or `pyproject.toml` includes `psycopg2` or `psycopg` it requires build tools, so either set `ddev config --webimage-extra-packages=build-essential` or change your requirement to `psycopg2-binary`.
-
 ## Drupal
 
-For all versions of Drupal 8+ the Composer techniques work. The settings configuration is done differently for each Drupal version, but the project type is "drupal".
+The legacy type `drupal` will be interpreted as the latest stable version of Drupal, so in 2024, `ddev config --project-type=drupal` will configure a Drupal 11 project. `drupal` can also be used as the project type in the `.ddev/config.yaml` but it will be interpreted as the latest stable version.
 
 === "Drupal 11"
 
     ```bash
-    mkdir my-drupal-site && cd my-drupal-site
-    ddev config --project-type=drupal --php-version=8.3 --docroot=web
-    ddev start
+    mkdir my-drupal11-site && cd my-drupal11-site
+    ddev config --project-type=drupal11 --docroot=web
     ddev composer create drupal/recommended-project:^11
     ddev composer require drush/drush
-    ddev config --update
-    ddev restart
     ddev drush site:install --account-name=admin --account-pass=admin -y
     ddev launch
     # or automatically log in with
     ddev launch $(ddev drush uli)
+    ```
+
+=== "Drupal CMS"
+
+    ```bash
+    mkdir my-drupal-cms && cd my-drupal-cms
+    ddev config --project-type=drupal11 --docroot=web
+    ddev composer create --stability="RC" drupal/cms
+    ddev launch
+    ```
+
+    or use the Zip file download technique:
+
+    ```
+    CMS_VERSION=1.0.0-rc2
+    curl -o drupal-cms.zip -fL https://ftp.drupal.org/files/projects/cms-${CMS_VERSION}.zip
+    unzip drupal-cms.zip && rm drupal-cms.zip
+    cd drupal-cms
+    ./launch-drupal-cms.sh
     ```
 
 === "Drupal 10"
 
     ```bash
-    mkdir my-drupal-site && cd my-drupal-site
-    ddev config --project-type=drupal --php-version=8.3 --docroot=web
-    ddev start
+    mkdir my-drupal10-site && cd my-drupal10-site
+    ddev config --project-type=drupal10 --docroot=web
     ddev composer create drupal/recommended-project:^10
-    ddev config --update
-    ddev composer require drush/drush
-    ddev drush site:install --account-name=admin --account-pass=admin -y
-    ddev launch
-    # or automatically log in with
-    ddev launch $(ddev drush uli)
-    ```
-
-=== "Drupal 9 (EOL)"
-
-    ```bash
-    mkdir my-drupal-site && cd my-drupal-site
-    ddev config --project-type=drupal --php-version=8.1 --docroot=web
-    ddev start
-    ddev composer create drupal/recommended-project:^9
-    ddev config --update
     ddev composer require drush/drush
     ddev drush site:install --account-name=admin --account-pass=admin -y
     ddev launch
@@ -322,7 +381,7 @@ Visit [Ibexa documentation](https://doc.ibexa.co/en/latest/getting_started/insta
 ```bash
 mkdir my-joomla-site && cd my-joomla-site
 tag=$(curl -L "https://api.github.com/repos/joomla/joomla-cms/releases/latest" | docker run -i --rm ddev/ddev-utilities jq -r .tag_name) && curl -L "https://github.com/joomla/joomla-cms/releases/download/$tag/Joomla_$tag-Stable-Full_Package.zip" -o joomla.zip
-unzip ./joomla.zip && rm joomla.zip
+unzip ./joomla.zip && rm -f joomla.zip
 ddev config --project-type=php --webserver-type=apache-fpm --upload-dirs=images
 ddev start
 ddev php installation/joomla.php install --site-name="My Joomla Site" --admin-user="Administrator" --admin-username=admin --admin-password=AdminAdmin1! --admin-email=admin@example.com --db-type=mysql --db-encryption=0 --db-host=db --db-user=db --db-pass="db" --db-name=db --db-prefix=ddev_ --public-folder=""
@@ -342,7 +401,7 @@ Start a new [Kirby CMS](https://getkirby.com) project or use an existing one.
     mkdir my-kirby-site && cd my-kirby-site
 
     # Set up the DDEV environment
-    ddev config --omit-containers=db
+    ddev config --omit-containers=db --webserver-type=apache-fpm
 
     # Spin up the project and install the Kirby Starterkit
     ddev start
@@ -361,7 +420,7 @@ Start a new [Kirby CMS](https://getkirby.com) project or use an existing one.
     cd my-kirby-site
 
     # Set up the DDEV environment
-    ddev config --omit-containers=db
+    ddev config --omit-containers=db --webserver-type=apache-fpm
 
     # Spin up the project
     ddev start
@@ -385,6 +444,38 @@ The Laravel project type can be used for [StarterKits](https://laravel.com/docs/
     mkdir my-laravel-site && cd my-laravel-site
     ddev config --project-type=laravel --docroot=public
     ddev composer create "laravel/laravel:^11"
+    ddev launch
+    ```
+
+=== "Laravel Installer"
+
+    ```bash
+    mkdir my-laravel-site && cd my-laravel-site
+    ddev config --project-type=laravel --docroot=public
+
+    # Temporarily add the Laravel installer as /usr/local/bin/laravel in the web container
+    echo 'ARG COMPOSER_HOME=/usr/local/composer
+    RUN composer global require laravel/installer
+    RUN ln -s $COMPOSER_HOME/vendor/bin/laravel /usr/local/bin/laravel
+    ' > .ddev/web-build/Dockerfile.laravel
+
+    # Start the project
+    ddev start
+
+    # Select a starter kit of your choice.
+    # The database is temporarily set to SQLite and will be switched to MariaDB
+    ddev exec laravel new temp --database=sqlite
+
+    # 'laravel new' can't install in the current directory right away,
+    # so we use 'rsync' to move the installed files one level up
+    ddev exec 'rsync -rltgopD temp/ ./ && rm -rf temp'
+
+    # Remove the Laravel installer and the .env file
+    rm -rf .ddev/web-build/Dockerfile.laravel .env
+
+    # Restart the project and execute the post-install actions
+    ddev restart
+    ddev composer run-script post-create-project-cmd
     ddev launch
     ```
 
@@ -417,32 +508,55 @@ The Laravel project type can be used for [StarterKits](https://laravel.com/docs/
 
     Normal details of a Composer build for Magento 2 are on the [Magento 2 site](https://experienceleague.adobe.com/docs/commerce-operations/installation-guide/composer.html). You must have a public and private key to install from Magento’s repository. When prompted for “username” and “password” in `composer create`, it’s asking for your public key as "username" and private key as "password".
 
-    Note that you can install the Adobe/Magento composer credentials in your global `~/.ddev/homeadditions/.composer/auth.json` and never have to find them again. See [In-Container Home Directory and Shell Configuration](extend/in-container-configuration.md).
+    !!!tip "Store Adobe/Magento Composer credentials in the global DDEV config"
+        If you have Composer installed on your workstation and have an `auth.json` you can reuse the `auth.json` by making a symlink. See [In-Container Home Directory and Shell Configuration](extend/in-container-configuration.md):
+
+        ```
+        mkdir -p ~/.ddev/homeadditions/.composer && ln -s ~/.composer/auth.json ~/.ddev/homeadditions/.composer/auth.json
+        ```
+
+        Alternately, you can install the Adobe/Magento Composer credentials in your global `~/.ddev/homeadditions/.composer/auth.json` and never have to enter them again (see below):
+
+        ??? "Script to store Adobe/Magento Composer credentials (click me)"
+            ```bash
+            # Enter your username/password and agree to store your credentials
+            ddev_dir="$(ddev version -j | docker run -i --rm ddev/ddev-utilities jq -r ".raw.\"global-ddev-dir\" | select (.!=null) // \"$HOME/.ddev\"" 2>/dev/null)"
+            mkdir -p $ddev_dir/homeadditions/.composer
+            docker_command=("docker" "run" "-it" "--rm" "-v" "$ddev_dir/homeadditions/.composer:/composer" "--workdir=/tmp" "-e" "COMPOSER_HOME=/composer" "--user" "$(id -u):$(id -g)")
+            auth_json_path="$ddev_dir/homeadditions/.composer/auth.json"
+            if [ -L "$auth_json_path" ]; then
+                # If auth.json is a symlink, add the optional mount
+                auth_json_dir=$(dirname "$(readlink -f "$auth_json_path")")
+                docker_command+=("-v" "$auth_json_dir:$auth_json_dir")
+            fi
+            image="$(ddev version -j | docker run -i --rm ddev/ddev-utilities jq -r ".raw.web | select (.!=null)" 2>/dev/null)"
+            docker_command+=("$image" "bash" "-c" "composer create --repository https://repo.magento.com/ magento/project-community-edition --no-install")
+            # Execute the command to store credentials
+            "${docker_command[@]}"
+            ```
 
     ```bash
-    mkdir my-magento2-site && cd my-magento2-site
-    ddev config --project-type=magento2 --docroot=pub --disable-settings-management \
-    --upload-dirs=media --web-environment-add=COMPOSER_HOME="/var/www/html/.ddev/homeadditions/.composer"
-
-    ddev get ddev/ddev-elasticsearch
+    export MAGENTO_HOSTNAME=my-magento2-site
+    mkdir ${MAGENTO_HOSTNAME} && cd ${MAGENTO_HOSTNAME}
+    ddev config --project-type=magento2 --docroot=pub --upload-dirs=media --disable-settings-management
+    ddev add-on get ddev/ddev-elasticsearch
     ddev start
-    ddev composer create --repository=https://repo.magento.com/ magento/project-community-edition
+    ddev composer create --repository https://repo.magento.com/ magento/project-community-edition
     rm -f app/etc/env.php
-    echo "/auth.json" >.ddev/homeadditions/.composer/.gitignore
 
-    # Change the base-url below to your project's URL
-    ddev magento setup:install --base-url="https://my-magento2-site.ddev.site/" \
-    --cleanup-database --db-host=db --db-name=db --db-user=db --db-password=db \
-    --elasticsearch-host=elasticsearch --search-engine=elasticsearch7 --elasticsearch-port=9200 \
-    --admin-firstname=Magento --admin-lastname=User --admin-email=user@example.com \
-    --admin-user=admin --admin-password=Password123 --language=en_US
+    ddev magento setup:install --base-url="https://${MAGENTO_HOSTNAME}.ddev.site/" \
+        --cleanup-database --db-host=db --db-name=db --db-user=db --db-password=db \
+        --elasticsearch-host=elasticsearch --search-engine=elasticsearch7 --elasticsearch-port=9200 \
+        --admin-firstname=Magento --admin-lastname=User --admin-email=user@example.com \
+        --admin-user=admin --admin-password=Password123 --language=en_US
 
     ddev magento deploy:mode:set developer
     ddev magento module:disable Magento_TwoFactorAuth Magento_AdminAdobeImsTwoFactorAuth
     ddev config --disable-settings-management=false
-    ddev php bin/magento info:adminuri
-    # Append the URI returned by the previous command either to ddev launch, like for example ddev launch /admin_XXXXXXX, or just run ddev launch and append the URI to the path in the browser
-    ddev launch
+    # Change the backend frontname URL to /admin_ddev
+    ddev magento setup:config:set --backend-frontname="admin_ddev" --no-interaction
+    # Login using `admin` user and `Password123` password
+    ddev launch /admin_ddev
     ```
 
     Change the admin name and related information as needed.
@@ -458,21 +572,20 @@ The Laravel project type can be used for [StarterKits](https://laravel.com/docs/
 
 === "OpenMage/Magento 1"
 
-    1. Download OpenMage from [release page](https://github.com/OpenMage/magento-lts/releases).
-    2. Make a directory for it, for example `mkdir ~/workspace/OpenMage` and change to the new directory `cd ~/workspace/OpenMage`.
-    3. Run [`ddev config`](../users/usage/commands.md#config) and accept the defaults.
-    4. Install sample data. (See below.)
-    5. Run [`ddev start`](../users/usage/commands.md#start).
-    6. Follow the URL to the base site.
+    ```bash
+    mkdir my-magento1-site && cd my-magento1-site
+    tag=$(curl -L "https://api.github.com/repos/OpenMage/magento-lts/releases/latest" | docker run -i --rm ddev/ddev-utilities jq -r .tag_name) && curl -L "https://github.com/OpenMage/magento-lts/releases/download/$tag/openmage-$tag.zip" -o openmage.zip
+    unzip ./openmage.zip && rm -f openmage.zip
+    ddev config --project-type=magento --web-environment-add=MAGE_IS_DEVELOPER_MODE=1
+    ddev start
+    # Install openmage and optionally install sample data
+    ddev openmage-install
+    ddev launch /admin
 
-    You may want the [Magento 1 Sample Data](https://github.com/Vinai/compressed-magento-sample-data) for experimentation:
-
-    * Download Magento [1.9.2.4 Sample Data](https://github.com/Vinai/compressed-magento-sample-data/raw/master/compressed-magento-sample-data-1.9.2.4.tgz).
-    * Extract the download:
-        `tar -zxf ~/Downloads/compressed-magento-sample-data-1.9.2.4.tgz --strip-components=1`
-    * Import the example database `magento_sample_data_for_1.9.2.4.sql` with `ddev import-db --file=magento_sample_data_for_1.9.2.4.sql` to database **before** running OpenMage install.
-
-    OpenMage is a huge codebase, and we recommend [using Mutagen for performance](install/performance.md#mutagen) on macOS and traditional Windows.
+    # Note that openmage itself provides several custom DDEV commands, including
+    # `openmage-install`, `openmage-admin`, `phpmd`, `rector`, `phpcbf`, `phpstan`, `vendor-patches`,
+    # and `php-cs-fixer`.
+    ```
 
 ## Moodle
 
@@ -502,7 +615,7 @@ The Laravel project type can be used for [StarterKits](https://laravel.com/docs/
 
     ``` bash
     mkdir my-pimcore-site && cd my-pimcore-site
-    ddev config --docroot=public
+    ddev config --project-type=php --docroot=public --webimage-extra-packages='php${DDEV_PHP_VERSION}-amqp'
 
     ddev start
     ddev composer create pimcore/skeleton
@@ -512,28 +625,9 @@ The Laravel project type can be used for [StarterKits](https://laravel.com/docs/
         command: 'while true; do /var/www/html/bin/console messenger:consume pimcore_core pimcore_maintenance pimcore_scheduled_tasks pimcore_image_optimize pimcore_asset_update --memory-limit=250M --time-limit=3600; done'
         directory: /var/www/html" >.ddev/config.pimcore.yaml
 
-    ddev start
+    ddev restart
     ddev launch /admin
     ```
-
-## Python/Flask (Experimental)
-
-```bash
-git clone https://github.com/example/my-python-site
-cd my-python-site
-ddev config # Follow the prompts
-# Tell gunicorn where your app is (WSGI_APP)
-ddev config --web-environment-add=WSGI_APP=<my-app:app>
-ddev start
-# If you need to do setup before the site can go live, do it:
-# ddev exec flask forge
-ddev launch
-```
-
-* DDEV will install all everything in your `requirements.txt` or `pyproject.toml` into a `venv`. This takes a little while on first startup.
-* If your app requires settings, you can add them as environment variables, or otherwise configure your app to use the database, etc. (Database settings are host: `db`, database: `db`, user: `db`, password `db` no matter whether you're using PostgreSQL, MariaDB, or MySQL.)
-* You can watch `pip install` output in real time on that first slow startup with `ddev logs -f` in another window.
-* If your `requirements.txt` includes `psycopg2` it requires build tools, so either set `ddev config --web-extra-packages=build-essential` or change your requirement to `psycopg2-binary`.
 
 ## Shopware
 
@@ -556,7 +650,7 @@ ddev launch
 
     For more advanced tasks like adding elasticsearch, building and watching storefront and administration, see [susi.dev](https://susi.dev/ddev-shopware-6).
 
-## Silverstripe
+## Silverstripe CMS
 
 Use a new or existing Composer project, or clone a Git repository.
 
@@ -582,12 +676,12 @@ Use a new or existing Composer project, or clone a Git repository.
     ddev sake dev/build flush=all
     ```
 
-Your Silverstripe project is now ready.
-The CMS can be found at /admin, log into the default admin account using `admin` and `password`.
+Your Silverstripe CMS project is now ready.
+The CMS can be found at `/admin`, log into the default admin account using `admin` and `password`.
 
-Visit the [Silverstripe documentation](https://userhelp.silverstripe.org/en/5/) for more information.
+Visit the Silverstripe CMS [user documentation](https://userhelp.silverstripe.org/) and [developer documentation](https://docs.silverstripe.org/) for more information.
 
-`ddev sake` can be used as a shorthand for the Silverstripe Make command `ddev exec vendor/bin/sake`
+`ddev sake` can be used as a shorthand for the Silverstripe CLI command `ddev exec vendor/bin/sake`.
 
 To open the CMS directly from CLI, run `ddev launch /admin`.
 
@@ -627,7 +721,7 @@ ddev start
 ddev composer create sulu/skeleton
 ```
 
-Create your default webspace configuration `mv config/webspaces/example.xml config/webspaces/my-sulu-site.xml` and adjust the values for `<name>` and `<key>` so that they are matching your project:
+Create your default webspace configuration `mv config/webspaces/website.xml config/webspaces/my-sulu-site.xml` and adjust the values for `<name>` and `<key>` so that they are matching your project:
 
 ```bash
 <?xml version="1.0" encoding="utf-8"?>
@@ -636,24 +730,30 @@ Create your default webspace configuration `mv config/webspaces/example.xml conf
           xsi:schemaLocation="http://schemas.sulu.io/webspace/webspace http://schemas.sulu.io/webspace/webspace-1.1.xsd">
     <!-- See: http://docs.sulu.io/en/latest/book/webspaces.html how to configure your webspace-->
 
-    <name>My Sulu CMS</name>
-    <key>my-sulu-cms</key>
+    <name>My Sulu Site</name>
+    <key>my-sulu-site</key>
+```
+
+Alternatively, use the following commands to adjust the values for `<name>` and `<key>` to match your project setup:
+
+```bash
+export SULU_PROJECT_NAME="My Sulu Site"
+export SULU_PROJECT_KEY="my-sulu-site"
+export SULU_PROJECT_CONFIG_FILE="config/webspaces/my-sulu-site.xml"
+ddev exec "mv config/webspaces/website.xml ${SULU_PROJECT_CONFIG_FILE}"
+ddev exec "sed -i -e 's|<name>.*</name>|<name>${SULU_PROJECT_NAME}</name>|g' -e 's|<key>.*</key>|<key>${SULU_PROJECT_KEY}</key>|g' ${SULU_PROJECT_CONFIG_FILE}"
 ```
 
 !!!warning "Caution"
     Changing the `<key>` for a webspace later on causes problems. It is recommended to decide on the value for the key before the database is build in the next step.
 
-The information for the database connection is set in the environment variable `DATABASE_URL`. The installation will have created a `.env.local` file.  Set `DATABASE_URL` in the `.env.local` file so it looks like this:
+Now build the database. Building with the `dev` argument adds the user `admin` with the password `admin` to your project.
 
 ```bash
-APP_ENV=dev
-DATABASE_URL="mysql://db:db@db:3306/db?serverVersion=8.0&charset=utf8mb4"
-```
-
-Now build the database. Building with the `dev` argument adds a user `admin`with the the password `admin` to your project.
-
-```bash
-ddev exec bin/adminconsole sulu:build dev
+# Set APP_ENV and DATABASE_URL in .env.local
+ddev dotenv set .env.local --app-env=dev --database-url="mysql://db:db@db:3306/db?serverVersion=8.0&charset=utf8mb4"
+ddev exec bin/adminconsole sulu:build dev --no-interaction
+# Login using `admin` user and `admin` password
 ddev launch /admin
 ```
 
@@ -668,13 +768,13 @@ ddev launch /admin
 
 There are many ways to install Symfony, here are a few of them based on the [Symfony docs](https://symfony.com/doc/current/setup.html).
 
-If your project uses a database you'll want to set the [DB connection string](https://symfony.com/doc/current/doctrine.html#configuring-the-database) in the `.env`. If using the default MariaDB configuration, you'll want `DATABASE_URL="mysql://db:db@db:3306/db?serverVersion=10.11"`. If you're using a different database type or version, see `ddev describe` for the type and version.
+DDEV automatically updates or creates the `.env.local` file with the database information.
 
 === "Composer"
 
     ```bash
     mkdir my-symfony-site && cd my-symfony-site
-    ddev config --docroot=public
+    ddev config --project-type=symfony --docroot=public
     ddev composer create symfony/skeleton
     ddev composer require webapp
     # When it asks if you want to include docker configuration, say "no" with "x"
@@ -685,10 +785,12 @@ If your project uses a database you'll want to set the [DB connection string](ht
 
     ```bash
     mkdir my-symfony-site && cd my-symfony-site
-    ddev config --docroot=public
+    ddev config --project-type=symfony --docroot=public
     ddev start
     ddev exec symfony check:requirements
-    ddev exec symfony new temp --version="7.0.*" --webapp
+    ddev exec symfony new temp --version="7.1.*" --webapp
+    # 'symfony new' can't install in the current directory right away,
+    # so we use 'rsync' to move the installed files one level up
     ddev exec 'rsync -rltgopD temp/ ./ && rm -rf temp'
     ddev launch
     ```
@@ -698,15 +800,27 @@ If your project uses a database you'll want to set the [DB connection string](ht
     ```bash
     git clone <my-symfony-repo> my-symfony-site
     cd my-symfony-site
-    ddev config --docroot=public
+    ddev config --project-type=symfony --docroot=public
     ddev start
     ddev composer install
     ddev launch
     ```
 
-## TYPO3
+!!!tip "Want to run Symfony Console (`bin/console`)?"
 
-TYPO3 provides a [detailed DDEV installation guide](https://docs.typo3.org/m/typo3/tutorial-getting-started/main/en-us/Installation/TutorialDdev.html) for each major version.
+    ```bash
+    ddev console list
+    # ddev console doctrine:schema:update --force
+    ```
+
+!!!tip "Consuming Messages (Running the Worker)"
+    Edit `.ddev/config.yaml` in your project directory and uncomment `post-start` hook to see `messenger:consume` command logs, and run:
+
+    ```bash
+    ddev exec symfony server:log
+    ```
+
+## TYPO3
 
 === "Composer"
 
@@ -809,7 +923,7 @@ There are several easy ways to use DDEV with WordPress:
 
     ```php
     // Include for DDEV-managed settings in wp-config-ddev.php.
-    $ddev_settings = dirname(__FILE__) . '/wp-config-ddev.php';
+    $ddev_settings = __DIR__ . '/wp-config-ddev.php';
     if (is_readable($ddev_settings) && !defined('DB_USER')) {
     require_once($ddev_settings);
     }

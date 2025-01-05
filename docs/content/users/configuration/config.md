@@ -94,6 +94,14 @@ Composer version for the web container and the [`ddev composer`](../usage/comman
 | -- | -- | --
 | :octicons-file-directory-16: project | `2` | Can be `2`, `1`, or empty (`""`) for latest major version at container build time.<br><br>Can also be a minor version like `2.2` for the latest release of that branch, an explicit version like `1.0.22`, or a keyword like `stable`, `preview` or `snapshot`. See Composer documentation.
 
+!!!tip "How to run Composer from `vendor/bin/composer`?"
+
+    ```shell
+    ddev exec vendor/bin/composer --version
+    # If you have a custom composer_root:
+    ddev exec '$DDEV_COMPOSER_ROOT/vendor/bin/composer --version'
+    ```
+
 ## `corepack_enable`
 
 Whether to `corepack enable` on Node.js configuration.
@@ -127,14 +135,12 @@ Example: `dbimage_extra_packages: ["less"]` will add the `less` package when the
 You can configure a [version constraint](https://github.com/Masterminds/semver#checking-version-constraints) for DDEV that will be validated against the running DDEV executable and prevent `ddev start` from running if it doesn't validate. For example:
 
 ```yaml
-ddev_version_constraint: '>= v1.23.0-alpha1'
+ddev_version_constraint: '>= v1.24.0-alpha1'
 ```
-
-This is only supported with DDEV versions above v1.22.4; older DDEV versions will ignore this setting.
 
 | Type | Default | Usage
 | -- | -- | --
-| :octicons-file-directory-16: project | | `>= 1.22.4`
+| :octicons-file-directory-16: project | | `>= 1.23.4`
 
 ## `default_container_timeout`
 
@@ -151,16 +157,6 @@ Not currently used.
 | Type | Default | Usage
 | -- | -- | --
 | :octicons-globe-16: global | `false` | Can `true` or `false`.
-
-## `disable_http2`
-
-Whether to disable HTTP/2 listen in `ddev-router`.
-
-| Type | Default | Usage
-| -- | -- | --
-| :octicons-globe-16: global | `false` | Can be `true` or `false`.
-
-Only available with legacy `router: nginx-proxy`, not the default `router: traefik`. When `true`, the router will not listen for HTTP/2, but use HTTP/1.1 SSL. (Some browsers don’t work well with HTTP/2.)
 
 ## `disable_settings_management`
 
@@ -304,7 +300,7 @@ Email associated with Let’s Encrypt feature. (Works in conjunction with [`use_
 | -- | -- | --
 | :octicons-globe-16: global | `` | &zwnj;
 
-Set with `ddev config global --letsencrypt-email=me@example.com`. Used with the [casual hosting](../topics/hosting.md) feature.
+Set with `ddev config global --letsencrypt-email=me@example.com`. Used with the [hosting](../topics/hosting.md) feature.
 
 ## `mailpit_http_port`
 
@@ -354,7 +350,7 @@ The URL-friendly name DDEV should use to reference the project.
 
 ## `ngrok_args`
 
-Extra flags for [configuring ngrok](https://ngrok.com/docs/ngrok-agent/config) when [sharing projects](../topics/sharing.md) with the [`ddev share`](../usage/commands.md#share) command.
+Extra flags for [configuring ngrok](https://ngrok.com/docs/agent/config) when [sharing projects](../topics/sharing.md) with the [`ddev share`](../usage/commands.md#share) command.
 
 | Type | Default | Usage
 | -- | -- | --
@@ -388,6 +384,8 @@ Whether to skip mounting project into web container.
 Node.js version for the web container’s “system” version. [`n`](https://www.npmjs.com/package/n) tool is under the hood.
 
 There is no need to reconfigure `nodejs_version` unless you want a version other than the version already specified, which will be the default version at the time the project was configured.
+
+Note that specifying any non-default Node.js version will cause DDEV to download and install that version when running `ddev start` the first time on a project. If optimizing first-time startup speed (as in Continuous Integration) is your biggest concern, consider using the default version of Node.js.
 
 | Type | Default | Usage
 | -- | -- | --
@@ -466,7 +464,7 @@ The PHP version the project should use.
 
 | Type | Default | Usage
 | -- |---------| --
-| :octicons-file-directory-16: project | `8.2`   | Can be `5.6`, `7.0`, `7.1`, `7.2`, `7.3`, `7.4`, `8.0`, `8.1`, `8.2`, '8.3', or `8.4`.
+| :octicons-file-directory-16: project | `8.3`   | Can be `5.6` through `8.4`. New versions are added when released upstream.
 
 You can only specify the major version (`7.3`), not a minor version (`7.3.2`), from those explicitly available.
 
@@ -488,20 +486,10 @@ Specific docker-compose version for download.
 | -- | -- | --
 | :octicons-globe-16: global | &zwnj; | &zwnj;
 
-If set to `v2.8.0`, for example, it will download and use that version instead of the expected version for docker-compose.
+If set to `v2.8.3`, for example, it will download and use that version instead of the expected version for docker-compose.
 
 !!!warning "Troubleshooting Only!"
     This should only be used in specific cases like troubleshooting. Please don't experiment with it unless directed to do so.
-
-## `router`
-
-Whether to enable the default [Traefik router](../extend/traefik-router.md) or the deprecated "nginx-proxy" router.
-
-| Type | Default | Usage
-| -- | -- | --
-| :octicons-globe-16: global | `traefik` | Can `traefik` or `nginx-proxy` (deprecated).
-
-May also be set via `ddev config global --router=traefik` or `ddev config global --router=nginx-proxy`.
 
 ## `router_bind_all_interfaces`
 
@@ -559,7 +547,9 @@ Timezone for container and PHP configuration.
 
 | Type | Default | Usage
 | -- | -- | --
-| :octicons-file-directory-16: project | `UTC` | Can be any [valid timezone](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones), like `Europe/Dublin` or `MST7MDT`.
+| :octicons-file-directory-16: project | Automatic detection or `UTC` | Can be any [valid timezone](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones), like `Europe/Dublin` or `MST7MDT`.
+
+If `timezone` is unset, DDEV will attempt to derive it from the host system timezone using the `$TZ` environment variable or the `/etc/localtime` symlink.
 
 ## `traefik_monitor_port`
 
@@ -575,11 +565,11 @@ The DDEV-specific project type.
 
 | Type | Default | Usage
 | -- | -- | --
-| :octicons-file-directory-16: project | `php` | Can be `backdrop`, `craftcms`, `django4`, `drupal6`, `drupal7`, `drupal`,  `laravel`, `magento`, `magento2`, `php`, `python`, `shopware6`, `silverstripe`, `typo3`, or `wordpress`.
+| :octicons-file-directory-16: project | `php` | Can be `backdrop`, `cakephp`, `craftcms`, `drupal`, `drupal6`, `drupal7`, `drupal8`, `drupal9`, `drupal10`, `drupal11`,   `laravel`, `magento`, `magento2`, `php`, `shopware6`, `silverstripe`, `symfony`, `typo3`, or `wordpress`.
 
-The `php` and `python` types don’t attempt [CMS configuration](../../users/quickstart.md) or settings file management and can work with any project.
+The `php` type doesn’t attempt [CMS configuration](../../users/quickstart.md) or settings file management and can work with any project.
 
-The former DDEV project types `drupal8`, `drupal9`, and `drupal10` can still be manually specified; by using `drupal` instead, DDEV will autodetect the correct type and its corresponding settings.
+The many versions of the Drupal project types can be used, for example `drupal11` or `drupal6`. There is also a special `drupal` type that is interpreted as "latest stable Drupal version", so in late 2024, `drupal` means `drupal11`.
 
 ## `upload_dirs`
 
@@ -624,7 +614,7 @@ Whether to use hardened images for internet deployment.
 | -- | -- | --
 | :octicons-globe-16: global | `false` | Can `true` or `false`.
 
-When `true`, more secure hardened images are used for an internet deployment. These do not include sudo in the web container, and the container is run without elevated privileges. Generally used with the [casual hosting](../topics/hosting.md) feature.
+When `true`, more secure hardened images are used for an internet deployment. These do not include sudo in the web container, and the container is run without elevated privileges. Generally used with the [hosting](../topics/hosting.md) feature.
 
 ## `use_letsencrypt`
 
@@ -634,7 +624,7 @@ Whether to enable Let’s Encrypt integration. (Works in conjunction with [`lets
 | -- | -- | --
 | :octicons-globe-16: global | `false` | Can `true` or `false`.
 
-May also be set via `ddev config global --use-letsencrypt` or `ddev config global --use-letsencrypt=false`. When `true`, `letsencrypt_email` must also be set and the system must be available on the internet. Used with the [casual hosting](../topics/hosting.md) feature.
+May also be set via `ddev config global --use-letsencrypt` or `ddev config global --use-letsencrypt=false`. When `true`, `letsencrypt_email` must also be set and the system must be available on the internet. Used with the [hosting](../topics/hosting.md) feature.
 
 ## `web_environment`
 
@@ -687,7 +677,7 @@ Which available [web server type](../extend/customization-extendibility.md#chang
 
 | Type | Default | Usage
 | -- | -- | --
-| :octicons-file-directory-16: project | `nginx-fpm` | Can be `nginx-fpm`, `apache-fpm`, or `nginx-gunicorn`.
+| :octicons-file-directory-16: project | `nginx-fpm` | Can be `nginx-fpm` or `apache-fpm`.
 
 To change from the default `nginx-fpm` to `apache-fpm`, for example, you would need to edit your project’s `.ddev/config.yaml` to include the following:
 

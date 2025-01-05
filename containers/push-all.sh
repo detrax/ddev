@@ -1,10 +1,10 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 set -eu -o pipefail
 if [ "${VERSION:-}" = "" ]; then
   export VERSION=$(git describe --tags --always --dirty)
 fi
-for item in ddev-php-base ddev-nginx-proxy-router ddev-ssh-agent ddev-traefik-router ddev-webserver; do
+for item in ddev-gitpod-base ddev-php-base ddev-ssh-agent ddev-traefik-router ddev-webserver; do
   echo "=========== PUSHING $item:${VERSION} ============"
   pushd $item >/dev/null
   make push VERSION=${VERSION}

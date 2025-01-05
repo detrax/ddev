@@ -8,6 +8,8 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -143,6 +145,9 @@ var SkipHooks = false
 
 // GetType returns the application type as a (lowercase) string
 func (app *DdevApp) GetType() string {
+	if app.Type == nodeps.AppTypeDrupal {
+		app.Type = nodeps.AppTypeDrupalLatestStable
+	}
 	return strings.ToLower(app.Type)
 }
 
@@ -198,6 +203,7 @@ func (app *DdevApp) FindContainerByType(containerType string) (*dockerTypes.Cont
 // Describe returns a map which provides detailed information on services associated with the running site.
 // if short==true, then only the basic information is returned.
 func (app *DdevApp) Describe(short bool) (map[string]interface{}, error) {
+
 	app.DockerEnv()
 	err := app.ProcessHooks("pre-describe")
 	if err != nil {
@@ -281,13 +287,13 @@ func (app *DdevApp) Describe(short bool) (map[string]interface{}, error) {
 	appDesc["xdebug_enabled"] = app.XdebugEnabled
 	appDesc["webimg"] = app.WebImage
 	appDesc["dbimg"] = app.GetDBImage()
-	appDesc["services"] = map[string]map[string]string{}
+	appDesc["services"] = map[string]map[string]interface{}{}
 
 	containers, err := dockerutil.GetAppContainers(app.Name)
 	if err != nil {
 		return nil, err
 	}
-	services := appDesc["services"].(map[string]map[string]string)
+	services := appDesc["services"].(map[string]map[string]interface{})
 	for _, k := range containers {
 		serviceName := strings.TrimPrefix(k.Names[0], "/")
 		shortName := strings.Replace(serviceName, fmt.Sprintf("ddev-%s-", app.Name), "", 1)
@@ -298,23 +304,55 @@ func (app *DdevApp) Describe(short bool) (map[string]interface{}, error) {
 			continue
 		}
 		fullName := strings.TrimPrefix(serviceName, "/")
-		services[shortName] = map[string]string{}
+		services[shortName] = map[string]interface{}{}
 		services[shortName]["status"] = c.State.Status
 		services[shortName]["full_name"] = fullName
 		services[shortName]["image"] = strings.TrimSuffix(c.Config.Image, fmt.Sprintf("-%s-built", app.Name))
 		services[shortName]["short_name"] = shortName
-		var ports []string
-		for pk := range c.Config.ExposedPorts {
-			ports = append(ports, pk.Port())
-		}
-		services[shortName]["exposed_ports"] = strings.Join(ports, ",")
-		var hostPorts []string
+
+		var exposedPrivatePorts []int
+		exposedPublicPorts := make(map[int]int)
 		for _, pv := range k.Ports {
 			if pv.PublicPort != 0 {
-				hostPorts = append(hostPorts, strconv.FormatInt(int64(pv.PublicPort), 10))
+				exposedPublicPorts[int(pv.PublicPort)] = int(pv.PrivatePort)
+			}
+			if !slices.Contains(exposedPrivatePorts, int(pv.PrivatePort)) {
+				exposedPrivatePorts = append(exposedPrivatePorts, int(pv.PrivatePort))
 			}
 		}
-		services[shortName]["host_ports"] = strings.Join(hostPorts, ",")
+
+		// Sort exposed ports
+		sort.Ints(exposedPrivatePorts)
+		var exposedPrivatePortsStr []string
+		for _, p := range exposedPrivatePorts {
+			exposedPrivatePortsStr = append(exposedPrivatePortsStr, strconv.FormatInt(int64(p), 10))
+		}
+
+		// Extract host ports from map
+		var exposedPublicPortsKeys []int
+		for p := range exposedPublicPorts {
+			exposedPublicPortsKeys = append(exposedPublicPortsKeys, p)
+		}
+
+		// Sort host/exposed port map by exposed port
+		sort.SliceStable(exposedPublicPortsKeys, func(i, j int) bool {
+			return exposedPublicPorts[exposedPublicPortsKeys[i]] < exposedPublicPorts[exposedPublicPortsKeys[j]]
+		})
+		exposedPublicPortsMapping := make([]map[string]string, 0)
+		for _, p := range exposedPublicPortsKeys {
+			exposedPublicPortsMapping = append(exposedPublicPortsMapping, map[string]string{"host_port": strconv.FormatInt(int64(p), 10), "exposed_port": strconv.FormatInt(int64(exposedPublicPorts[p]), 10)})
+		}
+
+		// Sort host ports
+		var exposedPublicPortsStr []string
+		sort.Ints(exposedPublicPortsKeys)
+		for _, p := range exposedPublicPortsKeys {
+			exposedPublicPortsStr = append(exposedPublicPortsStr, strconv.FormatInt(int64(p), 10))
+		}
+
+		services[shortName]["exposed_ports"] = strings.Join(exposedPrivatePortsStr, ",")
+		services[shortName]["host_ports"] = strings.Join(exposedPublicPortsStr, ",")
+		services[shortName]["host_ports_mapping"] = exposedPublicPortsMapping
 
 		// Extract VIRTUAL_HOST, HTTP_EXPOSE and HTTPS_EXPOSE for additional info
 		if !IsRouterDisabled(app) {
@@ -348,7 +386,7 @@ func (app *DdevApp) Describe(short bool) (map[string]interface{}, error) {
 			appHostname := ""
 
 			if ok {
-				appHostname = hostname
+				appHostname = hostname.(string)
 			} else {
 				appHostname = appDesc["hostname"].(string)
 			}
@@ -358,11 +396,13 @@ func (app *DdevApp) Describe(short bool) (map[string]interface{}, error) {
 					continue
 				}
 
+				// If the HTTP port is 80 (default), it doesn't get included in URL
 				portDefault := "80"
 				attributeName := "http_url"
 				protocol := "http://"
 
 				if name == "HTTPS_EXPOSE" {
+					// If the HTTPS port is 443 (default), it doesn't get included in URL
 					portDefault = "443"
 					attributeName = "https_url"
 					protocol = "https://"
@@ -379,7 +419,7 @@ func (app *DdevApp) Describe(short bool) (map[string]interface{}, error) {
 					services[shortName][attributeName] = protocol + appHostname
 
 					if ports[0] != portDefault {
-						services[shortName][attributeName] = services[shortName][attributeName] + ":" + ports[0]
+						services[shortName][attributeName] = services[shortName][attributeName].(string) + ":" + ports[0]
 					}
 				}
 			}
@@ -450,6 +490,22 @@ func (app DdevApp) GetAbsDocroot(inContainer bool) string {
 	return filepath.Join(app.GetAbsAppRoot(false), app.GetDocroot())
 }
 
+// CreateDocroot creates the docroot directory for DDEV app if it doesn't exist
+func (app DdevApp) CreateDocroot() error {
+	if app.Docroot == "" {
+		return nil
+	}
+	docrootAbsPath, err := filepath.Abs(app.Docroot)
+	if err != nil {
+		return err
+	}
+	if !fileutil.IsDirectory(docrootAbsPath) {
+		err := os.MkdirAll(docrootAbsPath, 0755)
+		return err
+	}
+	return nil
+}
+
 // GetAbsAppRoot returns the absolute path to the project root on the host or if
 // inContainer is set to true in the container.
 func (app DdevApp) GetAbsAppRoot(inContainer bool) string {
@@ -508,28 +564,107 @@ func (app *DdevApp) GetWebserverType() string {
 }
 
 // GetRouterHTTPPort returns app's router http port
-// Start with global config and then override with project config
 func (app *DdevApp) GetRouterHTTPPort() string {
-	port := globalconfig.DdevGlobalConfig.RouterHTTPPort
-	if app.RouterHTTPPort != "" {
-		port = app.RouterHTTPPort
+
+	// If the web container is running and HTTP_EXPOSE has a mapping,
+	// return the host-side mapped port
+	if httpExpose := app.GetWebEnvVar("HTTP_EXPOSE"); httpExpose != "" {
+		//util.Debug("GetRouterHTTPPort(): HTTP_EXPOSE=%s", httpExpose)
+		httpPort := app.PortFromExposeVariable(httpExpose, "80")
+		if httpPort != "" {
+			//util.Debug("GetRouterHTTPPort(): returning httpPort=%s found from HTTP_EXPOSE=%s", httpPort, httpExpose)
+			return httpPort
+		}
 	}
-	return port
+
+	// If the project-level RouterHTTPPort is set, it takes priority
+	// over the global RouterHTTPPort, so return that
+	if app.RouterHTTPPort != "" {
+		//util.Debug("GetRouterHTTPPort(): returning app.RouterHTTPPort=%s", app.RouterHTTPPort)
+		return app.RouterHTTPPort
+	}
+
+	// Finally, return whatever is in the global RouterHTTPPort,
+	// which will be port 80 by default, but could be something else
+	// if configured there
+
+	//util.Debug("GetRouterHTTPPort(): returning globalconfig.DdevGlobalConfig.RouterHTTPPort=%s", globalconfig.DdevGlobalConfig.RouterHTTPPort)
+	return globalconfig.DdevGlobalConfig.RouterHTTPPort
+}
+
+// GetWebEnvVar() gets an environment variable from
+// app.ComposeYaml["services"]["web"]["environment"]
+// It returns empty string if there is no var or the ComposeYaml
+// is just not set.
+func (app *DdevApp) GetWebEnvVar(name string) string {
+	if s, ok := app.ComposeYaml["services"].(map[string]interface{}); ok {
+		if v, ok := s["web"].(map[string]interface{})["environment"].(map[string]interface{})[name]; ok {
+			return v.(string)
+		}
+	}
+	return ""
+}
+
+// PortFromExposeVariable() uses a string like HTTP_EXPOSE or HTTPS_EXPOSE, which is a
+// comma-delimted list of colon-delimited port-pairs
+// Given a target port (often "80" or "8025") its job is to get from HTTPS_EXPOSE or HTTP_EXPOSE
+// the related port to be exposed on the router.
+// It returns an empty string if the HTTP_EXPOSE/HTTPS_EXPOSE is not
+// found or no valid port mapping is found.
+func (app *DdevApp) PortFromExposeVariable(exposeEnvVar string, targetPort string) string {
+	// Get the var
+	// split it via comma
+	// split it via colon into a map: rhs is the key, lhs is the value
+	portMap := make(map[string]string)
+	items := strings.Split(exposeEnvVar, ",")
+	for _, item := range items {
+		portPair := strings.Split(item, ":")
+		if len(portPair) == 2 {
+			portMap[portPair[1]] = portPair[0]
+		}
+	}
+	if w, ok := portMap[targetPort]; ok {
+		return w
+	}
+	return ""
 }
 
 // GetRouterHTTPSPort returns app's router https port
-// Start with global config and then override with project config
+// It has to choose from (highest to lowest priority):
+// 1. The actual port configured into running container via HTTPS_EXPOSE
+// 2. The project router_http_port
+// 3. The global router_http_port
 func (app *DdevApp) GetRouterHTTPSPort() string {
-	port := globalconfig.DdevGlobalConfig.RouterHTTPSPort
-	if app.RouterHTTPSPort != "" {
-		port = app.RouterHTTPSPort
+	if httpsExpose := app.GetWebEnvVar("HTTPS_EXPOSE"); httpsExpose != "" {
+		//util.Debug("GetRouterHTTPSPort(): HTTPS_EXPOSE='%s'", httpsExpose)
+		httpsPort := app.PortFromExposeVariable(httpsExpose, "80")
+		if httpsPort != "" {
+			//util.Debug("GetRouterHTTPSPort(): returning httpsPort=%s derived from HTTPS_EXPOSE=%s", httpsPort, httpsExpose)
+			return httpsPort
+		}
 	}
-	return port
+
+	if app.RouterHTTPSPort != "" {
+		//util.Debug("GetRouterHTTPSPort(): app.RouterHTTPSPort=%s", app.RouterHTTPSPort)
+		return app.RouterHTTPSPort
+	}
+
+	//util.Debug("GetRouterHTTPSPort(): returning globalconfig.DdevGlobalConfig.RouterHTTPSPort=%s", globalconfig.DdevGlobalConfig.RouterHTTPSPort)
+	return globalconfig.DdevGlobalConfig.RouterHTTPSPort
 }
 
-// GetMailpitHTTPPort returns app's router http port
-// Start with global config and then override with project config
+// GetMailpitHTTPPort returns app's mailpit router http port
+// If HTTP_EXPOSE has a mapping to port 8025 in the container, use that
+// If not, use the global or project MailpitHTTPPort
 func (app *DdevApp) GetMailpitHTTPPort() string {
+
+	if httpExpose := app.GetWebEnvVar("HTTP_EXPOSE"); httpExpose != "" {
+		httpPort := app.PortFromExposeVariable(httpExpose, "8025")
+		if httpPort != "" {
+			return httpPort
+		}
+	}
+
 	port := globalconfig.DdevGlobalConfig.RouterMailpitHTTPPort
 	if port == "" {
 		port = nodeps.DdevDefaultMailpitHTTPPort
@@ -540,9 +675,18 @@ func (app *DdevApp) GetMailpitHTTPPort() string {
 	return port
 }
 
-// GetMailpitHTTPSPort returns app's router https port
-// Start with global config and then override with project config
+// GetMailpitHTTPSPort returns app's mailpit router https port
+// If HTTPS_EXPOSE has a mapping to port 8025 in the container, use that
+// If not, use the global or project MailpitHTTPSPort
 func (app *DdevApp) GetMailpitHTTPSPort() string {
+
+	if httpsExpose := app.GetWebEnvVar("HTTPS_EXPOSE"); httpsExpose != "" {
+		httpsPort := app.PortFromExposeVariable(httpsExpose, "8025")
+		if httpsPort != "" {
+			return httpsPort
+		}
+	}
+
 	port := globalconfig.DdevGlobalConfig.RouterMailpitHTTPSPort
 	if port == "" {
 		port = nodeps.DdevDefaultMailpitHTTPSPort
@@ -715,11 +859,11 @@ func (app *DdevApp) ImportDB(dumpFile string, extractPath string, progress bool,
 		}
 
 		// Case for reading from file
-		inContainerCommand = []string{"bash", "-c", fmt.Sprintf(`set -eu -o pipefail && mysql -uroot -proot -e "%s" %s && pv %s/*.*sql |  perl -p -e 's/^(\/\*.*999999.*enable the sandbox mode *|CREATE DATABASE \/\*|USE %s)[^;]*(;|\*\/)//' | mysql %s %s`, preImportSQL, nodeps.MySQLRemoveDeprecatedMessage, insideContainerImportPath, "`", targetDB, nodeps.MySQLRemoveDeprecatedMessage)}
+		inContainerCommand = []string{"bash", "-c", fmt.Sprintf(`set -eu -o pipefail && mysql -e "%s" %s && pv %s/*.*sql |  perl -p -e 's/^(\/\*.*999999.*enable the sandbox mode *|CREATE DATABASE \/\*|USE %s)[^;]*(;|\*\/)//' | mysql %s %s`, preImportSQL, nodeps.MySQLRemoveDeprecatedMessage, insideContainerImportPath, "`", targetDB, nodeps.MySQLRemoveDeprecatedMessage)}
 
 		// Alternate case where we are reading from stdin
 		if dumpFile == "" && extractPath == "" {
-			inContainerCommand = []string{"bash", "-c", fmt.Sprintf(`set -eu -o pipefail && mysql -uroot -proot -e "%s" %s && perl -p -e 's/^(CREATE DATABASE \/\*|USE %s)[^;]*;//' | mysql %s %s`, preImportSQL, nodeps.MySQLRemoveDeprecatedMessage, "`", targetDB, nodeps.MySQLRemoveDeprecatedMessage)}
+			inContainerCommand = []string{"bash", "-c", fmt.Sprintf(`set -eu -o pipefail && mysql -e "%s" %s && perl -p -e 's/^(CREATE DATABASE \/\*|USE %s)[^;]*;//' | mysql %s %s`, preImportSQL, nodeps.MySQLRemoveDeprecatedMessage, "`", targetDB, nodeps.MySQLRemoveDeprecatedMessage)}
 		}
 
 	case nodeps.Postgres:
@@ -839,7 +983,7 @@ func (app *DdevApp) ExportDB(dumpFile string, compressionType string, targetDB s
 		confMsg = fmt.Sprintf("%s in %s format", confMsg, compressionType)
 	}
 
-	_, err = fmt.Fprintf(os.Stderr, confMsg+".\n")
+	_, err = fmt.Fprintf(os.Stderr, "%s.\n", confMsg)
 
 	return err
 }
@@ -964,7 +1108,7 @@ func (app *DdevApp) ImportFiles(uploadDir, importPath, extractPath string) error
 
 // ComposeFiles returns a list of compose files for a project.
 // It has to put the .ddev/docker-compose.*.y*ml first
-// It has to put the docker-compose.override.y*l last
+// It has to put the .ddev/docker-compose.override.y*ml last
 func (app *DdevApp) ComposeFiles() ([]string, error) {
 	origDir, _ := os.Getwd()
 	defer func() {
@@ -1004,6 +1148,42 @@ func (app *DdevApp) ComposeFiles() ([]string, error) {
 		orderedFiles = append(orderedFiles, app.GetConfigPath(overrides[0]))
 	}
 	return orderedFiles, nil
+}
+
+// EnvFiles returns a list of env files for a project.
+// It has to put the .ddev/.env first
+// It has to put the .ddev/.env.* second
+// Env files ending with .example are ignored.
+func (app *DdevApp) EnvFiles() ([]string, error) {
+	origDir, _ := os.Getwd()
+	defer func() {
+		_ = os.Chdir(origDir)
+	}()
+	err := os.Chdir(app.AppConfDir())
+	if err != nil {
+		return nil, err
+	}
+	envFiles, err := filepath.Glob(".env.*")
+	if err != nil {
+		return []string{}, fmt.Errorf(".env.* in %s: err=%v", app.AppConfDir(), err)
+	}
+
+	var orderedEnvFiles []string
+
+	webEnvFile := app.GetConfigPath(".env")
+	if fileutil.FileExists(webEnvFile) {
+		orderedEnvFiles = append(orderedEnvFiles, webEnvFile)
+	}
+
+	for _, file := range envFiles {
+		// Skip .example files
+		if strings.HasSuffix(file, ".example") {
+			continue
+		}
+		orderedEnvFiles = append(orderedEnvFiles, app.GetConfigPath(file))
+	}
+
+	return orderedEnvFiles, nil
 }
 
 // ProcessHooks executes Tasks defined in Hooks
@@ -1056,19 +1236,28 @@ func (app *DdevApp) GetDBImage() string {
 // Start initiates docker-compose up
 func (app *DdevApp) Start() error {
 	var err error
-
 	if app.IsMutagenEnabled() && globalconfig.DdevGlobalConfig.UseHardenedImages {
 		return fmt.Errorf("mutagen is not compatible with use-hardened-images")
 	}
+
+	// We don't yet know the ComposeYaml values, so make sure they're
+	// not set.
+	app.ComposeYaml = nil
+
+	// Set up ports to be replaced with ephemeral ports if needed
+	app.RouterHTTPPort = app.GetRouterHTTPPort()
+	app.RouterHTTPSPort = app.GetRouterHTTPSPort()
+	app.MailpitHTTPPort = app.GetMailpitHTTPPort()
+	app.MailpitHTTPSPort = app.GetMailpitHTTPSPort()
+	portsToCheck := []*string{&app.RouterHTTPPort, &app.RouterHTTPSPort, &app.MailpitHTTPPort, &app.MailpitHTTPSPort}
+	GetEphemeralPortsIfNeeded(portsToCheck, true)
 
 	app.DockerEnv()
 	dockerutil.EnsureDdevNetwork()
 	// The project network may have duplicates, we can remove them here.
 	// See https://github.com/ddev/ddev/pull/5508
-	if os.Getenv("COMPOSE_PROJECT_NAME") != "" {
-		ctx, client := dockerutil.GetDockerClient()
-		dockerutil.RemoveNetworkDuplicates(ctx, client, os.Getenv("COMPOSE_PROJECT_NAME")+"_default")
-	}
+	ctx, client := dockerutil.GetDockerClient()
+	dockerutil.RemoveNetworkDuplicates(ctx, client, app.GetDefaultNetworkName())
 
 	if err = dockerutil.CheckDockerCompose(); err != nil {
 		util.Failed(`Your docker-compose version does not exist or is set to an invalid version.
@@ -1162,14 +1351,15 @@ Fix with 'ddev config global --required-docker-compose-version="" --use-docker-c
 		util.Warning("Unable to PrepDdevDirectory: %v", err)
 	}
 
-	// The .ddev directory may still need to be populated, especially in tests
-	err = PopulateExamplesCommandsHomeadditions(app.Name)
-	if err != nil {
-		return err
-	}
 	// Make sure that any ports allocated are available.
 	// and of course add to global project list as well
 	err = app.UpdateGlobalProjectList()
+	if err != nil {
+		return err
+	}
+
+	// The .ddev directory may still need to be populated, especially in tests
+	err = PopulateExamplesCommandsHomeadditions(app.Name)
 	if err != nil {
 		return err
 	}
@@ -1309,6 +1499,7 @@ Fix with 'ddev config global --required-docker-compose-version="" --use-docker-c
 		ComposeFiles: []string{app.DockerComposeFullRenderedYAMLPath()},
 		Action:       []string{"--progress=" + progress, "build"},
 		Progress:     true,
+		Timeout:      time.Hour * 1,
 	})
 	if err != nil {
 		return fmt.Errorf("docker-compose build failed: %v, output='%s', stderr='%s'", err, out, stderr)
@@ -1316,8 +1507,36 @@ Fix with 'ddev config global --required-docker-compose-version="" --use-docker-c
 	if globalconfig.DdevVerbose {
 		util.Debug("docker-compose build output:\n%s\n\n", out)
 	}
+
+	_, logStderrOutput, err := dockerutil.RunSimpleContainer(ddevImages.GetWebImage()+"-"+app.Name+"-built", "log-stderr-"+app.Name+"-"+util.RandString(6), []string{"sh", "-c", "log-stderr.sh --show 2>/dev/null || true"}, []string{}, []string{}, nil, uid, true, false, map[string]string{"com.ddev.site-name": ""}, nil, nil)
+	// If the web image is dirty, try to rebuild it immediately
+	if err == nil && strings.TrimSpace(logStderrOutput) != "" && globalconfig.IsInternetActive() {
+		util.Debug("Executing docker-compose -f %s build web --progress=%s --no-cache", app.DockerComposeFullRenderedYAMLPath(), progress)
+		out, stderr, err = dockerutil.ComposeCmd(&dockerutil.ComposeCmdOpts{
+			ComposeFiles: []string{app.DockerComposeFullRenderedYAMLPath()},
+			Action:       []string{"--progress=" + progress, "build", "web", "--no-cache"},
+			Progress:     true,
+			Timeout:      time.Hour * 1,
+		})
+		if err != nil {
+			return fmt.Errorf("docker-compose build web --no-cache failed: %v, output='%s', stderr='%s'", err, out, stderr)
+		}
+		if globalconfig.DdevVerbose {
+			util.Debug("docker-compose build web --no-cache output:\n%s\n\n", out)
+		}
+	}
+
 	buildDuration := util.FormatDuration(buildDurationStart())
 	util.Success("Project images built in %s.", buildDuration)
+
+	util.Debug("Removing dangling images for the project %s", app.GetComposeProjectName())
+	danglingImages, err := dockerutil.FindImagesByLabels(map[string]string{"com.ddev.buildhost": "", "com.docker.compose.project": app.GetComposeProjectName()}, true)
+	if err != nil {
+		return fmt.Errorf("unable to get dangling images for the project %s: %v", app.GetComposeProjectName(), err)
+	}
+	for _, danglingImage := range danglingImages {
+		_ = dockerutil.RemoveImage(danglingImage.ID)
+	}
 
 	util.Debug("Executing docker-compose -f %s up -d", app.DockerComposeFullRenderedYAMLPath())
 	_, _, err = dockerutil.ComposeCmd(&dockerutil.ComposeCmdOpts{
@@ -1435,6 +1654,23 @@ Fix with 'ddev config global --required-docker-compose-version="" --use-docker-c
 	output.UserOut.Printf("Waiting for containers to become ready: %v", dependers)
 	waitErr := app.Wait(dependers)
 
+	if !slices.Contains(app.OmitContainers, "db") && app.Database.Type == nodeps.MySQL && (app.Database.Version == nodeps.MySQL80 || app.Database.Version == nodeps.MySQL84) && slices.Contains([]string{nodeps.PHP73, nodeps.PHP72, nodeps.PHP71, nodeps.PHP70, nodeps.PHP56}, app.PHPVersion) {
+		alterString := `ALTER USER 'db'@'%' IDENTIFIED WITH mysql_native_password BY 'db';
+			ALTER USER 'db'@'localhost' IDENTIFIED WITH mysql_native_password BY 'db';
+			ALTER USER 'root'@'%' IDENTIFIED WITH mysql_native_password BY 'root';
+			ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'root';`
+		userOutFunc := util.CaptureUserOut()
+		_, _, err = app.Exec(&ExecOpts{
+			Cmd:     fmt.Sprintf(`mysql -uroot -proot -e "%s"`, alterString),
+			Service: `db`,
+		})
+		_ = userOutFunc()
+		if err != nil {
+			util.Warning("unable to set mysql_native_password db password: %v", err)
+		}
+		util.Debug(`mysql 8, php 5.6-7.3, set mysql_native_password`)
+	}
+
 	err = PopulateGlobalCustomCommandFiles()
 	if err != nil {
 		util.Warning("Failed to populate global custom command files: %v", err)
@@ -1473,30 +1709,36 @@ Fix with 'ddev config global --required-docker-compose-version="" --use-docker-c
 		util.Warning("Something is wrong with your Docker provider and /mnt/ddev_config is not mounted from the project .ddev folder. Your project cannot normally function successfully with this situation. Is your project in your home directory?")
 	}
 
-	if app.NodeJSVersion != nodeps.NodeJSDefault {
-		util.Debug(`checking nodejs_version: "%s" install for errors`, app.NodeJSVersion)
-		nInstallStderr, _, _ := app.Exec(&ExecOpts{
-			Cmd: "cat /tmp/n-install-stderr.txt 2>/dev/null || true",
-		})
-		if nInstallStderr != "" {
-			util.Warning("Unable to install nodejs_version: \"%s\".\nError output from `n install %s`:\n%s", app.NodeJSVersion, app.NodeJSVersion, nInstallStderr)
-		}
+	util.Debug("Getting stderr output from 'log-stderr.sh --show'")
+	logStderr, _, _ := app.Exec(&ExecOpts{
+		Cmd: "log-stderr.sh --show 2>/dev/null || true",
+	})
+	logStderr = strings.TrimSpace(logStderr)
+	if logStderr != "" {
+		util.Warning(logStderr)
 	}
 
 	if !IsRouterDisabled(app) {
-		output.UserOut.Printf("Starting ddev-router if necessary...")
+		output.UserOut.Printf("Starting %s if necessary...", nodeps.RouterContainer)
 		err = StartDdevRouter()
 		if err != nil {
 			return err
 		}
 	}
 
-	output.UserOut.Printf("Waiting for additional project containers to become ready...")
-	err = app.WaitByLabels(map[string]string{"com.ddev.site-name": app.GetName()})
+	waitLabels := map[string]string{"com.ddev.site-name": app.GetName()}
+	containersAwaited, err := dockerutil.FindContainersByLabels(waitLabels)
 	if err != nil {
 		return err
 	}
-	output.UserOut.Printf("All project containers are now ready.")
+	containerNames := dockerutil.GetContainerNames(containersAwaited, []string{GetContainerName(app, "web"), GetContainerName(app, "db")})
+	if len(containerNames) > 0 {
+		output.UserOut.Printf("Waiting %ds for additional project containers %v to become ready...", app.GetMaxContainerWaitTime(), containerNames)
+	}
+	err = app.WaitByLabels(waitLabels)
+	if err != nil {
+		return err
+	}
 
 	if _, err = app.CreateSettingsFile(); err != nil {
 		return fmt.Errorf("failed to write settings file %s: %v", app.SiteDdevSettingsFile, err)
@@ -1510,6 +1752,14 @@ Fix with 'ddev config global --required-docker-compose-version="" --use-docker-c
 	err = app.ProcessHooks("post-start")
 	if err != nil {
 		return err
+	}
+
+	if logStderr != "" {
+		util.Warning(`Some components of the project %s were not installed properly.
+The project is running anyway, but see the warnings above for details.
+If offline, run 'ddev restart' once you are back online.
+If online, check your connection and run 'ddev restart' later.
+If this seems to be a config issue, update it accordingly.`, app.Name)
 	}
 
 	return nil
@@ -1588,8 +1838,8 @@ func (app *DdevApp) FindAllImages() ([]string, error) {
 func FindNotOmittedImages(app *DdevApp) []string {
 	var images []string
 	containerImageMap := map[string]func() string{
-		SSHAuthName:       ddevImages.GetSSHAuthImage,
-		RouterProjectName: ddevImages.GetRouterImage,
+		SSHAuthName:            ddevImages.GetSSHAuthImage,
+		nodeps.RouterContainer: ddevImages.GetRouterImage,
 	}
 
 	for containerName, getImage := range containerImageMap {
@@ -2166,7 +2416,7 @@ func (app *DdevApp) DockerEnv() {
 
 	envVars := map[string]string{
 		// The compose project name can no longer contain dots; must be lower-case
-		"COMPOSE_PROJECT_NAME":           strings.ToLower("ddev-" + strings.Replace(app.Name, `.`, "", -1)),
+		"COMPOSE_PROJECT_NAME":           app.GetComposeProjectName(),
 		"COMPOSE_REMOVE_ORPHANS":         "true",
 		"COMPOSE_CONVERT_WINDOWS_PATHS":  "true",
 		"COMPOSER_EXIT_ON_PATCH_FAILURE": "1",
@@ -2207,8 +2457,8 @@ func (app *DdevApp) DockerEnv() {
 		"DDEV_PRIMARY_URL":         app.GetPrimaryURL(),
 		"DDEV_VERSION":             versionconstants.DdevVersion,
 		"DOCKER_SCAN_SUGGEST":      "false",
-		"GOOS":                     runtime.GOOS,
-		"GOARCH":                   runtime.GOARCH,
+		"DDEV_GOOS":                runtime.GOOS,
+		"DDEV_GOARCH":              runtime.GOARCH,
 		"IS_DDEV_PROJECT":          "true",
 		"IS_GITPOD":                strconv.FormatBool(nodeps.IsGitpod()),
 		"IS_CODESPACES":            strconv.FormatBool(nodeps.IsCodespaces()),
@@ -2319,7 +2569,7 @@ func (app *DdevApp) WaitByLabels(labels map[string]string) error {
 	waitTime := app.GetMaxContainerWaitTime()
 	err := dockerutil.ContainersWait(waitTime, labels)
 	if err != nil {
-		return fmt.Errorf("container(s) failed to become healthy before their configured timeout or in %d seconds. This might be a problem with the healthcheck and not a functional problem. (%v)", waitTime, err)
+		return fmt.Errorf("container(s) failed to become healthy before their configured timeout or in %d seconds.\nThis might be a problem with the healthcheck and not a functional problem.\nThe error was '%v'", waitTime, err.Error())
 	}
 	return nil
 }
@@ -2380,7 +2630,7 @@ func (app *DdevApp) Snapshot(snapshotName string) (string, error) {
 
 	snapshotFile := snapshotName + "-" + app.Database.Type + "_" + app.Database.Version + ".gz"
 
-	existingSnapshots, err := app.ListSnapshots()
+	existingSnapshots, err := app.ListSnapshotNames()
 	if err != nil {
 		return "", err
 	}
@@ -2531,6 +2781,7 @@ func (app *DdevApp) Stop(removeData bool, createSnapshot bool) error {
 	app.DockerEnv()
 	var err error
 
+	clear(EphemeralRouterPortsAssigned)
 	if app.Name == "" {
 		return fmt.Errorf("invalid app.Name provided to app.Stop(), app=%v", app)
 	}
@@ -2686,6 +2937,7 @@ func (app *DdevApp) GetHTTPURL() string {
 	url := ""
 	if !IsRouterDisabled(app) {
 		url = "http://" + app.GetHostname()
+		// If the HTTP port is the default "80", it's not included in the URL
 		if app.GetRouterHTTPPort() != "80" {
 			url = url + ":" + app.GetRouterHTTPPort()
 		}
@@ -2701,6 +2953,7 @@ func (app *DdevApp) GetHTTPSURL() string {
 	if !IsRouterDisabled(app) {
 		url = "https://" + app.GetHostname()
 		p := app.GetRouterHTTPSPort()
+		// If the HTTPS port is 443 (default), it doesn't get included in URL
 		if p != "443" {
 			url = url + ":" + p
 		}
@@ -2735,15 +2988,18 @@ func (app *DdevApp) GetAllURLs() (httpURLs []string, httpsURLs []string, allURLs
 		if app.GetRouterHTTPPort() != "80" {
 			httpPort = ":" + app.GetRouterHTTPPort()
 		}
+		// If the HTTPS port is 443 (default), it doesn't get included in URL
 		if app.GetRouterHTTPSPort() != "443" {
 			httpsPort = ":" + app.GetRouterHTTPSPort()
 		}
 
-		httpsURLs = append(httpsURLs, "https://"+name+httpsPort)
+		if !app.CanUseHTTPOnly() {
+			httpsURLs = append(httpsURLs, "https://"+name+httpsPort)
+		}
 		httpURLs = append(httpURLs, "http://"+name+httpPort)
 	}
 
-	if !IsRouterDisabled(app) {
+	if !IsRouterDisabled(app) && !app.CanUseHTTPOnly() {
 		httpsURLs = append(httpsURLs, app.GetWebContainerDirectHTTPSURL())
 	}
 	httpURLs = append(httpURLs, app.GetWebContainerDirectHTTPURL())
@@ -2992,6 +3248,16 @@ func (app *DdevApp) GetPostgresVolumeName() string {
 	return app.Name + "-postgres"
 }
 
+// GetComposeProjectName returns the name of the docker-compose project
+func (app *DdevApp) GetComposeProjectName() string {
+	return strings.ToLower("ddev-" + strings.Replace(app.Name, `.`, "", -1))
+}
+
+// GetDefaultNetworkName returns the default project network name
+func (app *DdevApp) GetDefaultNetworkName() string {
+	return app.GetComposeProjectName() + "_default"
+}
+
 // StartAppIfNotRunning is intended to replace much-duplicated code in the commands.
 func (app *DdevApp) StartAppIfNotRunning() error {
 	var err error
@@ -3069,6 +3335,37 @@ func FormatSiteStatus(status string) string {
 		formattedStatus = util.ColorizeText(formattedStatus, "green")
 	}
 	return formattedStatus
+}
+
+// GetStartScriptTimeout returns the timeout for scripts on start
+// Used for START_SCRIPT_TIMEOUT
+func (app *DdevApp) GetStartScriptTimeout() string {
+	containerTimeout, err := strconv.Atoi(app.DefaultContainerTimeout)
+	if err != nil {
+		containerTimeout, _ = strconv.Atoi(nodeps.DefaultDefaultContainerTimeout)
+	}
+	// Use 1/4 of the default container timeout for scripts on start
+	timeoutForScriptsOnStart := strconv.Itoa(containerTimeout / 4)
+	// With 30 seconds minimum
+	if containerTimeout/4 <= 30 {
+		timeoutForScriptsOnStart = "30"
+	}
+	return timeoutForScriptsOnStart
+}
+
+// GetMinimalContainerTimeout returns the timeout depending on the container timeout.
+// It returns the default timeout if the container's specified timeout is less than the default.
+func (app *DdevApp) GetMinimalContainerTimeout() string {
+	containerTimeout, err := strconv.Atoi(app.DefaultContainerTimeout)
+	defaultTimeout, _ := strconv.Atoi(nodeps.DefaultDefaultContainerTimeout)
+	if err != nil {
+		containerTimeout = defaultTimeout
+	}
+	minimalTimeout := strconv.Itoa(containerTimeout)
+	if containerTimeout <= defaultTimeout {
+		minimalTimeout = nodeps.DefaultDefaultContainerTimeout
+	}
+	return minimalTimeout
 }
 
 // genericImportFilesAction defines the workflow for importing project files.

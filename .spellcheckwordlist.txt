@@ -9,16 +9,19 @@ amazee.io
 Autocompletion
 Available
 Bash
+Bluesky
 CakePHP
 Callgraph
 CGroups
 CIFS
+CiviCRM
 CLI
 Cloudflare
 CMD
 CMS
 CMSes
 Colima
+Contao
 CPUs
 CTRL
 CentOS
@@ -95,6 +98,7 @@ Magento's
 Mailpit
 Mailpit's
 Mailgun
+Magerun
 Manage
 MariaDB
 Matthias
@@ -294,7 +298,6 @@ disable
 disallowal
 distro
 distros
-django
 dns
 dnsmasq
 docker
@@ -336,7 +339,6 @@ filesystem
 filesystems
 findstr
 fish
-flask
 for
 format
 fpath
@@ -461,6 +463,8 @@ mysite
 mysql
 mysqldump
 mysqlworkbench
+n98-magerun
+n98-magerun2
 namlen
 natively
 netstat
@@ -533,7 +537,6 @@ provider
 ps
 psql
 public
-python
 Querious
 quickstart
 quickstarts
@@ -708,6 +711,7 @@ xdebug's
 xtrabackup
 xeyes
 xhprof
+xhgui
 xz'd
 yaml
 yml

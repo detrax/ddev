@@ -37,7 +37,7 @@ var (
 	// projectTypeArg is the DDEV app type, like drupal7/drupal8/wordpress.
 	projectTypeArg string
 
-	// phpVersionArg overrides the default version of PHP to be used in the web container, like 5.6/7.0/7.1/7.2/7.3/7.4/8.0/8.1/8.2/etc.
+	// phpVersionArg overrides the default version of PHP to be used in the web container, like 5.6-8.4 etc.
 	phpVersionArg string
 
 	// httpPortArg overrides the default HTTP port (80).
@@ -233,7 +233,7 @@ func init() {
 	ConfigCommand.Flags().StringSlice("upload-dirs", []string{}, "Sets the project's upload directories, the destination directories of the import-files command.")
 	ConfigCommand.Flags().String("upload-dir", "", "Sets the project's upload directories, the destination directories of the import-files command.")
 	_ = ConfigCommand.Flags().MarkDeprecated("upload-dir", "please use --upload-dirs instead")
-	ConfigCommand.Flags().StringVar(&webserverTypeArg, "webserver-type", "", "Sets the project's desired webserver type: nginx-fpm/apache-fpm/nginx-gunicorn")
+	ConfigCommand.Flags().StringVar(&webserverTypeArg, "webserver-type", "", "Sets the project's desired webserver type: nginx-fpm/apache-fpm")
 	ConfigCommand.Flags().StringVar(&webImageArg, "web-image", "", "Sets the web container image")
 	ConfigCommand.Flags().BoolVar(&webImageDefaultArg, "web-image-default", false, "Sets the default web container image for this DDEV version")
 	ConfigCommand.Flags().StringVar(&dbImageArg, "db-image", "", "Sets the db container image")
@@ -392,19 +392,10 @@ func handleMainConfigArgs(cmd *cobra.Command, _ []string, app *ddevapp.DdevApp) 
 	// Ensure that the docroot exists
 	if docrootRelPathArg != "" {
 		app.Docroot = docrootRelPathArg
-		if _, err = os.Stat(docrootRelPathArg); os.IsNotExist(err) {
-			var docrootAbsPath string
-			docrootAbsPath, err = filepath.Abs(app.Docroot)
-			if err != nil {
-				util.Failed("Could not create docroot at %s: %v", docrootRelPathArg, err)
-			}
-
-			if err = os.MkdirAll(docrootAbsPath, 0755); err != nil {
-				util.Failed("Could not create docroot at %s: %v", docrootAbsPath, err)
-			}
-
-			util.Success("Created docroot directory at %s", docrootAbsPath)
+		if err = app.CreateDocroot(); err != nil {
+			util.Failed("Could not create docroot at %s: %v", app.Docroot, err)
 		}
+		util.Success("Created docroot directory at %s", app.GetAbsDocroot(false))
 	} else if !cmd.Flags().Changed("docroot") {
 		app.Docroot = ddevapp.DiscoverDefaultDocroot(app)
 	}
@@ -419,7 +410,7 @@ func handleMainConfigArgs(cmd *cobra.Command, _ []string, app *ddevapp.DdevApp) 
 	}
 
 	if projectTypeArg != "" && !ddevapp.IsValidAppType(projectTypeArg) {
-		validAppTypes := strings.Join(ddevapp.GetValidAppTypesWithoutAliases(), ", ")
+		validAppTypes := strings.Join(ddevapp.GetValidAppTypes(), ", ")
 		util.Failed("Apptype must be one of %s", validAppTypes)
 	}
 

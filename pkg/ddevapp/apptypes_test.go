@@ -17,15 +17,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestApptypeDetection does a simple test of various filesystem setups to make
+// TestDetectAppType does a simple test of various filesystem setups to make
 // sure the expected apptype is returned.
-func TestApptypeDetection(t *testing.T) {
+func TestDetectAppType(t *testing.T) {
 	assert := asrt.New(t)
 	origDir, _ := os.Getwd()
-	appTypes := ddevapp.GetValidAppTypesWithoutAliases()
+	appTypes := ddevapp.GetValidAppTypes()
 	var notSimplePHPAppTypes = []string{}
 	for _, t := range appTypes {
-		if t != nodeps.AppTypePHP {
+		// we don't detect "drupal" app type
+		if t != nodeps.AppTypePHP && t != nodeps.AppTypeDrupal {
 			notSimplePHPAppTypes = append(notSimplePHPAppTypes, t)
 		}
 	}
@@ -61,15 +62,16 @@ func TestConfigOverrideAction(t *testing.T) {
 
 	appTypes := map[string]string{
 		nodeps.AppTypeBackdrop:     nodeps.PHPDefault,
-		nodeps.AppTypeCakePHP:      nodeps.PHP83,
+		nodeps.AppTypeCakePHP:      nodeps.PHPDefault,
 		nodeps.AppTypeCraftCms:     nodeps.PHPDefault,
 		nodeps.AppTypeDrupal6:      nodeps.PHP56,
 		nodeps.AppTypeDrupal7:      nodeps.PHP82,
-		nodeps.AppTypeDrupal:       nodeps.PHPDefault,
-		nodeps.AppTypeLaravel:      nodeps.PHP82,
+		nodeps.AppTypeDrupal11:     nodeps.PHPDefault,
+		nodeps.AppTypeLaravel:      nodeps.PHPDefault,
 		nodeps.AppTypeMagento:      nodeps.PHPDefault,
-		nodeps.AppTypeMagento2:     nodeps.PHP82,
+		nodeps.AppTypeMagento2:     nodeps.PHPDefault,
 		nodeps.AppTypeSilverstripe: nodeps.PHPDefault,
+		nodeps.AppTypeSymfony:      nodeps.PHPDefault,
 		nodeps.AppTypeWordPress:    nodeps.PHPDefault,
 	}
 
@@ -88,7 +90,7 @@ func TestConfigOverrideAction(t *testing.T) {
 		})
 
 		// Prompt for apptype as a way to get it into the config.
-		input := fmt.Sprintf(appType + "\n")
+		input := fmt.Sprintf("%s\n", appType)
 		scanner := bufio.NewScanner(strings.NewReader(input))
 		util.SetInputScanner(scanner)
 		err = app.AppTypePrompt()
@@ -122,7 +124,6 @@ func TestConfigOverrideActionOnExistingConfig(t *testing.T) {
 
 	// This will only work for those project types defining configOverrideAction and altering php version
 	appTypes := map[string]string{
-		nodeps.AppTypeCakePHP: nodeps.PHP83,
 		nodeps.AppTypeDrupal6: nodeps.PHP56,
 		nodeps.AppTypeDrupal7: nodeps.PHP82,
 		// For AppTypeDrupal we can't guess a version without a working installation.
@@ -143,7 +144,7 @@ func TestConfigOverrideActionOnExistingConfig(t *testing.T) {
 		})
 
 		// Prompt for apptype as a way to get it into the config.
-		input := fmt.Sprintf(appType + "\n")
+		input := fmt.Sprintf("%s\n", appType)
 		scanner := bufio.NewScanner(strings.NewReader(input))
 		util.SetInputScanner(scanner)
 		err = app.AppTypePrompt()

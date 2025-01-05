@@ -1,8 +1,8 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 function basic_setup {
     export CONTAINER_NAME="testserver"
-    export HOSTPORT=33000
+    export HOSTPORT=31000
     export MYTMPDIR="${HOME}/tmp/testserver-sh_${RANDOM}_$$"
     export outdir="${HOME}/tmp/mariadb_testserver/output_${RANDOM}_$$"
     export VOLUME="dbserver_test-${RANDOM}_$$"

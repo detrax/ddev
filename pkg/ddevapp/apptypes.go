@@ -104,21 +104,13 @@ func init() {
 			postStartAction:      craftCmsPostStartAction,
 		},
 
-		nodeps.AppTypeDjango4: {
-			settingsCreator:      django4SettingsCreator,
-			appTypeDetect:        isDjango4App,
-			configOverrideAction: django4ConfigOverrideAction,
-			postConfigAction:     django4PostConfigAction,
-			postStartAction:      django4PostStartAction,
-		},
-
 		nodeps.AppTypeDrupal6: {
 			settingsCreator:            createDrupalSettingsPHP,
 			uploadDirs:                 getDrupalUploadDirs,
 			hookDefaultComments:        getDrupal6Hooks,
 			appTypeSettingsPaths:       setDrupalSiteSettingsPaths,
 			appTypeDetect:              isDrupal6App,
-			configOverrideAction:       drupal6ConfigOverrideAction,
+			configOverrideAction:       drupalConfigOverrideAction,
 			postStartAction:            drupal6PostStartAction,
 			importFilesAction:          drupalImportFilesAction,
 			defaultWorkingDirMap:       docrootWorkingDir,
@@ -138,12 +130,48 @@ func init() {
 			composerCreateAllowedPaths: getDrupalComposerCreateAllowedPaths,
 		},
 
-		nodeps.AppTypeDrupal: {
+		nodeps.AppTypeDrupal8: {
 			settingsCreator:            createDrupalSettingsPHP,
 			uploadDirs:                 getDrupalUploadDirs,
 			hookDefaultComments:        getDrupalHooks,
 			appTypeSettingsPaths:       setDrupalSiteSettingsPaths,
-			appTypeDetect:              isDrupalApp,
+			appTypeDetect:              isDrupal8App,
+			configOverrideAction:       drupalConfigOverrideAction,
+			postStartAction:            drupalPostStartAction,
+			importFilesAction:          drupalImportFilesAction,
+			composerCreateAllowedPaths: getDrupalComposerCreateAllowedPaths,
+		},
+
+		nodeps.AppTypeDrupal9: {
+			settingsCreator:            createDrupalSettingsPHP,
+			uploadDirs:                 getDrupalUploadDirs,
+			hookDefaultComments:        getDrupalHooks,
+			appTypeSettingsPaths:       setDrupalSiteSettingsPaths,
+			appTypeDetect:              isDrupal9App,
+			configOverrideAction:       drupalConfigOverrideAction,
+			postStartAction:            drupalPostStartAction,
+			importFilesAction:          drupalImportFilesAction,
+			composerCreateAllowedPaths: getDrupalComposerCreateAllowedPaths,
+		},
+
+		nodeps.AppTypeDrupal10: {
+			settingsCreator:            createDrupalSettingsPHP,
+			uploadDirs:                 getDrupalUploadDirs,
+			hookDefaultComments:        getDrupalHooks,
+			appTypeSettingsPaths:       setDrupalSiteSettingsPaths,
+			appTypeDetect:              isDrupal10App,
+			configOverrideAction:       drupalConfigOverrideAction,
+			postStartAction:            drupalPostStartAction,
+			importFilesAction:          drupalImportFilesAction,
+			composerCreateAllowedPaths: getDrupalComposerCreateAllowedPaths,
+		},
+
+		nodeps.AppTypeDrupal11: {
+			settingsCreator:            createDrupalSettingsPHP,
+			uploadDirs:                 getDrupalUploadDirs,
+			hookDefaultComments:        getDrupalHooks,
+			appTypeSettingsPaths:       setDrupalSiteSettingsPaths,
+			appTypeDetect:              isDrupal11App,
 			configOverrideAction:       drupalConfigOverrideAction,
 			postStartAction:            drupalPostStartAction,
 			importFilesAction:          drupalImportFilesAction,
@@ -183,18 +211,19 @@ func init() {
 			postStartAction: nil,
 		},
 
-		nodeps.AppTypePython: {
-			appTypeDetect:        isPythonApp,
-			configOverrideAction: pythonConfigOverrideAction,
-			postConfigAction:     pythonPostConfigAction,
-		},
-
 		nodeps.AppTypeShopware6: {
 			appTypeDetect:        isShopware6App,
 			appTypeSettingsPaths: setShopware6SiteSettingsPaths,
 			uploadDirs:           getShopwareUploadDirs,
 			postStartAction:      shopware6PostStartAction,
 			importFilesAction:    shopware6ImportFilesAction,
+		},
+
+		nodeps.AppTypeSymfony: {
+			appTypeDetect:        isSymfonyApp,
+			appTypeSettingsPaths: setSymfonySiteSettingsPaths,
+			postStartAction:      symfonyPostStartAction,
+			hookDefaultComments:  getSymfonyHooks,
 		},
 
 		nodeps.AppTypeTYPO3: {
@@ -216,11 +245,10 @@ func init() {
 		},
 	}
 
-	drupalAlias := appTypeMatrix[nodeps.AppTypeDrupal]
-	drupalAlias.appTypeDetect = nil
-	for _, alias := range []string{nodeps.AppTypeDrupal8, nodeps.AppTypeDrupal9, nodeps.AppTypeDrupal10} {
-		appTypeMatrix[alias] = drupalAlias
-	}
+	// Now add "drupal" type as a copy of latest stable, but don't allow it to be detected as a type
+	drupalType := appTypeMatrix[nodeps.AppTypeDrupalLatestStable]
+	drupalType.appTypeDetect = nil
+	appTypeMatrix[nodeps.AppTypeDrupal] = drupalType
 }
 
 // CreateSettingsFile creates the settings file (like settings.php) for the
@@ -365,7 +393,15 @@ func (app *DdevApp) SetApptypeSettingsPaths() {
 // DetectAppType calls each apptype's detector until it finds a match,
 // or returns 'php' as a last resort.
 func (app *DdevApp) DetectAppType() string {
-	for appTypeName, appFuncs := range appTypeMatrix {
+	var keys []string
+	for k := range appTypeMatrix {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	// Traverse in sorted order
+	for _, appTypeName := range keys {
+		appFuncs := appTypeMatrix[appTypeName]
 		if appFuncs.appTypeDetect != nil && appFuncs.appTypeDetect(app) {
 			return appTypeName
 		}
@@ -497,19 +533,5 @@ func GetValidAppTypes() []string {
 		keys = append(keys, k)
 		sort.Sort(natural.StringSlice(keys))
 	}
-	return keys
-}
-
-// GetValidAppTypesWithoutAliases returns the valid apptype keys from the appTypeMatrix without aliases like
-// drupal8/9/10
-func GetValidAppTypesWithoutAliases() []string {
-	keys := make([]string, 0, len(appTypeMatrix))
-	for k := range appTypeMatrix {
-		if k == nodeps.AppTypeDrupal8 || k == nodeps.AppTypeDrupal9 || k == nodeps.AppTypeDrupal10 {
-			continue
-		}
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
 	return keys
 }

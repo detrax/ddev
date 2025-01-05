@@ -2,6 +2,7 @@ package ddevapp
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/ddev/ddev/pkg/amplitude"
@@ -44,18 +45,28 @@ func (app *DdevApp) TrackProject() {
 		}
 	}
 
+	//builder := ampli.Project.Builder().Id(app.ProtectedID()).
+	//
+	//builder := ampli.Project.Builder().Id(app.ProtectedID()).PerformanceMode().PhpVersion().ProjectType().WebserverType().DdevVersionConstraint().NoProjectMount().WebimageExtraPackages().DbImageExtraPackages().DatabaseType().DatabaseVersion().CorepackEnable()a
 	builder := ampli.Project.Builder().
+		Id(app.ProtectedID()).
+		PerformanceMode(app.GetPerformanceMode()).
+		PhpVersion(app.GetPhpVersion()).
+		ProjectType(app.GetType()).
+		WebserverType(app.GetWebserverType()).
 		AddOns(GetInstalledAddonNames(app)).
 		Containers(services).
 		ContainersOmitted(containersOmitted).
 		FailOnHookFail(app.FailOnHookFail || app.FailOnHookFailGlobal).
-		Id(app.ProtectedID()).
 		NodejsVersion(app.NodeJSVersion).
-		PerformanceMode(app.GetPerformanceMode()).
-		PhpVersion(app.GetPhpVersion()).
-		ProjectType(app.GetType()).
 		RouterDisabled(IsRouterDisabled(app)).
-		WebserverType(app.GetWebserverType())
+		WebimageExtraPackages(app.WebImageExtraPackages).
+		DbImageExtraPackages(app.DBImageExtraPackages).
+		BindAllInterfaces(app.BindAllInterfaces).
+		CorepackEnable(app.CorepackEnable).
+		DdevVersionConstraint(app.DdevVersionConstraint).
+		DisableSettingsManagement(app.DisableSettingsManagement).
+		NoProjectMount(app.NoProjectMount).Ci(os.Getenv(`CI`) == `true`)
 
 	if !nodeps.ArrayContainsString(containersOmitted, "db") {
 		builder.

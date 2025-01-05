@@ -20,7 +20,7 @@ A project’s `.ddev` directory can be intimidating at first, so let’s take a 
     For example, if you see a `solr` directory, it probably pertains to a custom Solr [add-on service](../extend/additional-services.md).
 
 `addon-metadata` directory
-: Contains metadata about add-on services that have been added to the project. This allows commands like `ddev get --installed` and `ddev get --remove` to work, see [Managing Installed Add-Ons](../extend/additional-services.md#managing-installed-add-ons).
+: Contains metadata about add-on services that have been added to the project. This allows commands like `ddev add-on list --installed` and `ddev add-on remove` to work, see [Managing Installed Add-Ons](../extend/additional-services.md#managing-installed-add-ons).
 
 `apache` directory
 : Default Apache configuration when using `webserver_type: apache-fpm`, which [can be customized](../extend/customization-extendibility.md#custom-apache-configuration).
@@ -41,7 +41,7 @@ A project’s `.ddev` directory can be intimidating at first, so let’s take a 
 : Where snapshots go when you run the [`ddev snapshot`](../usage/commands.md#snapshot) command. You can safely delete anything in here that you don’t need.
 
 `docker-compose.*.yaml` files
-: Where Docker-friendly users can provide their own [custom compose files](../extend/custom-compose-files.md) that add or override services. Read more in [Additional Service Configurations & Add-ons](../extend/additional-services.md) and check out examples in [ddev-contrib](https://github.com/ddev/ddev-contrib).
+: Where Docker-friendly users can provide their own [custom compose files](../extend/custom-compose-files.md) that add or override services. Read more in [Additional Service Configurations & Add-ons](../extend/additional-services.md).
 
 `homeadditions` directory
 : Files to be copied into the web container on startup. You could use this, for example, to override the default home directory contents (`.profile`, `.bashrc`, `.composer`, `.ssh`), or include scripts that you’d like to be available inside the container. (You can do the same thing globally in `~/.ddev/homeadditions`.) Check out the [homeadditions docs](../extend/in-container-configuration.md) for more.

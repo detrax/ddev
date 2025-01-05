@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # This script is used to install a matching `mysql` client (with `mysqldump`)
 # in ddev-webserver
@@ -18,12 +18,12 @@ if [ "${MYSQL_VERSION}" = "5.6" ] || [ "${MYSQL_VERSION}" = "5.5" ]; then
   MYSQL_VERSION="5.7"
 fi
 
-TARBALL_VERSION=v0.2.3
+TARBALL_VERSION=v0.2.4
 TARBALL_URL=https://github.com/ddev/mysql-client-build/releases/download/${TARBALL_VERSION}/mysql-${MYSQL_VERSION}-${ARCH}.tar.gz
 
 # Install the related mysql client if available
 set -x
-cd /tmp && timeout 30 curl -L -o /tmp/mysql.tgz --fail -s ${TARBALL_URL}
+cd /tmp && log-stderr.sh --timeout "${START_SCRIPT_TIMEOUT:-30}" curl -L -o /tmp/mysql.tgz --fail ${TARBALL_URL}
 tar -zxf /tmp/mysql.tgz -C /usr/local/bin && rm -f /tmp/mysql.tgz
 
 # Remove any existing mariadb installs

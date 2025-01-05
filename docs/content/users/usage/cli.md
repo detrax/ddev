@@ -12,7 +12,7 @@ Type `ddev` or `ddev -h` in a terminal window to see the available DDEV [command
 * [`ddev stop`](../usage/commands.md#stop) stops a project and removes its memory usage (but does not throw away any data).
 * [`ddev poweroff`](../usage/commands.md#poweroff) stops all resources that DDEV is using and stops the Mutagen daemon if it’s running.
 * [`ddev delete`](../usage/commands.md#delete) destroys the database and DDEV’s knowledge of the project without touching your code.
-* [`ddev get`](../usage/commands.md#get) adds an add-on service.
+* [`ddev add-on`](../usage/commands.md#add-on) adds an add-on service.
 
 ## Lots of Other Commands
 
@@ -28,6 +28,7 @@ Type `ddev` or `ddev -h` in a terminal window to see the available DDEV [command
 * `ddev drush` (Drupal and Backdrop only) gives direct access to the `drush` CLI.
 * `ddev artisan` (Laravel only) gives direct access to the Laravel `artisan` CLI.
 * `ddev magento` (Magento2 only) gives access to the `magento` CLI.
+* `ddev console` (Symfony only) gives access to the `symfony console` CLI.
 * [`ddev craft`](../usage/commands.md#craft) (Craft CMS only) gives access to the `craft` CLI.
 * [`ddev yarn`](../usage/commands.md#yarn) and [`ddev npm`](../usage/commands.md#npm) give direct access to the `yarn` and `npm` CLIs.
 * `ddev cake` (CakePHP only) gives direct access to the CakePHP `cake` CLI.

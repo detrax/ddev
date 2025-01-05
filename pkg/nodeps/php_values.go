@@ -16,7 +16,7 @@ const (
 )
 
 // PHPDefault is the default PHP version, overridden by $DDEV_PHP_VERSION
-const PHPDefault = PHP82
+const PHPDefault = PHP83
 
 // ValidPHPVersions should be updated whenever PHP versions are added or removed, and should
 // be used to ensure user-supplied values are valid.
@@ -28,6 +28,14 @@ var ValidPHPVersions = map[string]bool{
 	PHP73: true,
 	PHP74: true,
 	PHP80: true,
+	PHP81: true,
+	PHP82: true,
+	PHP83: true,
+	PHP84: true,
+}
+
+// PreinstalledPHPVersions is list of preinstalled versions (already in ddev-php-base and ddev-webserver
+var PreinstalledPHPVersions = map[string]bool{
 	PHP81: true,
 	PHP82: true,
 	PHP83: true,

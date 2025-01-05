@@ -38,9 +38,8 @@ const (
 
 // Webserver types
 const (
-	WebserverNginxFPM      = "nginx-fpm"
-	WebserverApacheFPM     = "apache-fpm"
-	WebserverNginxGunicorn = "nginx-gunicorn"
+	WebserverNginxFPM  = "nginx-fpm"
+	WebserverApacheFPM = "apache-fpm"
 )
 
 // ValidOmitContainers is the list of things that can be omitted
@@ -59,7 +58,7 @@ var WebserverDefault = WebserverNginxFPM
 // PerformanceModeDefault is default value for app.PerformanceMode
 var PerformanceModeDefault = types.PerformanceModeEmpty
 
-const NodeJSDefault = "20"
+const NodeJSDefault = "22"
 
 // NoBindMountsDefault is default value for globalconfig.DDEVGlobalConfig.NoBindMounts
 var NoBindMountsDefault = false
@@ -82,30 +81,32 @@ var GoroutineLimit = 10
 // ValidWebserverTypes should be updated whenever supported webserver types are added or
 // removed, and should be used to ensure user-supplied values are valid.
 var ValidWebserverTypes = map[string]bool{
-	WebserverNginxFPM:      true,
-	WebserverApacheFPM:     true,
-	WebserverNginxGunicorn: true,
+	WebserverNginxFPM:  true,
+	WebserverApacheFPM: true,
 }
+
+const AppTypeDrupalLatestStable = AppTypeDrupal11
 
 // App types
 const (
-	AppTypeNone         = ""
-	AppTypeBackdrop     = "backdrop"
-	AppTypeCakePHP      = "cakephp"
-	AppTypeCraftCms     = "craftcms"
-	AppTypeDjango4      = "django4"
-	AppTypeDrupal6      = "drupal6"
-	AppTypeDrupal7      = "drupal7"
-	AppTypeDrupal8      = "drupal8"
-	AppTypeDrupal9      = "drupal9"
-	AppTypeDrupal10     = "drupal10"
+	AppTypeNone     = ""
+	AppTypeBackdrop = "backdrop"
+	AppTypeCakePHP  = "cakephp"
+	AppTypeCraftCms = "craftcms"
+	AppTypeDrupal6  = "drupal6"
+	AppTypeDrupal7  = "drupal7"
+	AppTypeDrupal8  = "drupal8"
+	AppTypeDrupal9  = "drupal9"
+	AppTypeDrupal10 = "drupal10"
+	AppTypeDrupal11 = "drupal11"
+	// AppTypeDrupal is an alias for "most recent Drupal version"
 	AppTypeDrupal       = "drupal"
 	AppTypeLaravel      = "laravel"
 	AppTypeSilverstripe = "silverstripe"
+	AppTypeSymfony      = "symfony"
 	AppTypeMagento      = "magento"
 	AppTypeMagento2     = "magento2"
 	AppTypePHP          = "php"
-	AppTypePython       = "python"
 	AppTypeShopware6    = "shopware6"
 	AppTypeTYPO3        = "typo3"
 	AppTypeWordPress    = "wordpress"

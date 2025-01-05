@@ -16,6 +16,7 @@ It will remain enabled until you start or restart the project.
 * You may need to open port 9003 in your firewall to allow Xdebug access. (See [Troubleshooting Xdebug](#troubleshooting-xdebug) below.)
 * The IDE’s debug server port must be set to Xdebug’s default 9003, which is already the case in popular IDEs. If the unusual case that you have a port conflict, see [Using Xdebug on a Port Other than the Default 9003](#using-xdebug-on-a-port-other-than-the-default-9003) below.
 * In the case of using running your IDE inside WSL2 (using WSLg) or with a proxy setup like JetBrains Gateway, you can set that with `ddev config global --xdebug-ide-location=wsl2`. If you're running your IDE with a proxy inside the web container, you can set that with `ddev config global --xdebug-ide-location=container`.
+* To debug Drush 13+ commands on Drupal [see instructions](../usage/cms-settings.md#drush-and-xdebug).
 
 For more background on Xdebug, see [Xdebug documentation](https://xdebug.org/docs/remote). The intention here is that one won’t have to understand Xdebug to do debugging.
 
@@ -67,7 +68,7 @@ Click on the local repository path and add `/var/www/html` as the *Absolute path
     ![PhpStorm debug start](../../images/phpstorm-config-debug-button.png)
 
 !!!tip "If you’re using [additional_hostnames](../extend/additional-hostnames.md)"
-    If you also want xdebug to trigger when using a URL other than the primary URL (as with  `additional_hostnames` or `additional_fqdns`), create a copy of the PhpStorm `server` (Settings->PHP->Servers) with the current settings and change the host and name to the desired ones. This will tell PHP Storm to listen to that hostname with the appropriate mapping.
+    If you also want Xdebug to trigger when using a URL other than the primary URL (as with  `additional_hostnames` or `additional_fqdns`), create a copy of the PhpStorm `server` (Settings->PHP->Servers) with the current settings and change the host and name to the desired ones. This will tell PHP Storm to listen to that hostname with the appropriate mapping.
 
 #### PhpStorm and Command-Line Debugging
 
@@ -113,6 +114,7 @@ The basic thing to understand about Xdebug is that it’s a network protocol. Yo
 Here are basic steps to take to sort out any difficulty:
 
 * Make sure your IDE is listening for Xdebug.
+* If you have set the global [xdebug_ide_location](../configuration/config.md#xdebug_ide_location) to **anything** please reset it to defaults before continuing. It is only for a very tiny subset of users. `ddev config global --xdebug-ide-location=""` and `ddev restart`.
 * `ddev logs` may show you something like `Xdebug: [Step Debug] Could not connect to debugging client. Tried: host.docker.internal:9003 (fallback through xdebug.client_host/xdebug.client_port) :-(`. If it does, it may mean that your firewall is blocking the connection, or in a small number of cases that `host.docker.internal` is not figured out successfully by DDEV or Docker. If it does:
     * Temporarily disable your firewall. On Windows/WSL this is typically Windows Defender; on macOS you'll find it in settings; on Debian/Ubuntu it's typically `ufw` so `sudo ufw disable`.
     * If disabling the firewall fixes the problem, re-enable the firewall and add an exception for port 9003. Your firewall will have a way to do this; on Debian/Ubuntu run `sudo ufw allow 9003`.

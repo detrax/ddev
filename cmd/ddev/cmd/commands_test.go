@@ -187,26 +187,12 @@ func TestCustomCommands(t *testing.T) {
 		assert.NoError(err, "Failed to run ddev %s -h", c)
 	}
 
-	for _, c := range []string{"mysql", "npm", "php", "yarn"} {
+	for _, c := range []string{"mariadb", "mysql", "npm", "php", "yarn"} {
 		_, err = exec.RunHostCommand(DdevBin, c, "--version")
 		assert.NoError(err, "Failed to run ddev %s --version", c)
 	}
-
-	// See if `ddev python` works for Python app types
-	origAppType := app.Type
-	for _, appType := range []string{nodeps.AppTypeDjango4, nodeps.AppTypePython} {
-		app.Type = appType
-		err = app.WriteConfig()
-		require.NoError(t, err)
-		for _, c := range []string{"python"} {
-			out, err = exec.RunHostCommand(DdevBin, c, "--version")
-			assert.NoError(err, "Expected ddev python --version to work with apptype=%s but it didn't, output=%s", c, app.Type, out)
-		}
-	}
-	app.Type = origAppType
-
 	// The various CMS commands should not be available here
-	for _, c := range []string{"artisan", "cake", "drush", "magento", "typo3", "wp"} {
+	for _, c := range []string{"artisan", "art", "cake", "drush", "magento", "typo3", "wp"} {
 		_, err = exec.RunHostCommand(DdevBin, c, "-h")
 		assert.Error(err, "found command %s when it should not have been there (no error) app.Type=%s", c, app.Type)
 	}
@@ -223,16 +209,18 @@ func TestCustomCommands(t *testing.T) {
 		assert.NoError(err)
 	}
 
-	// Drupal commands should only be available for type drupal
-	app.Type = nodeps.AppTypeDrupal9
-	_ = app.WriteConfig()
-	_, _ = exec.RunHostCommand(DdevBin)
-	err = app.MutagenSyncFlush()
-	assert.NoError(err)
-
-	for _, c := range []string{"drush"} {
-		_, err = exec.RunHostCommand(DdevBin, "help", c)
+	// Drupal commands should be available for type drupal/backdrop projects
+	for _, drupalType := range []string{nodeps.AppTypeDrupal7, nodeps.AppTypeDrupal8, nodeps.AppTypeDrupal9, nodeps.AppTypeDrupal10, nodeps.AppTypeDrupal11, nodeps.AppTypeBackdrop} {
+		app.Type = drupalType
+		_ = app.WriteConfig()
+		_, _ = exec.RunHostCommand(DdevBin)
+		err = app.MutagenSyncFlush()
 		assert.NoError(err)
+
+		for _, c := range []string{"drush"} {
+			_, err = exec.RunHostCommand(DdevBin, "help", c)
+			assert.NoError(err)
+		}
 	}
 
 	// Laravel commands should only be available for type laravel
@@ -241,7 +229,7 @@ func TestCustomCommands(t *testing.T) {
 	_, _ = exec.RunHostCommand(DdevBin)
 	err = app.MutagenSyncFlush()
 	assert.NoError(err)
-	for _, c := range []string{"artisan", "pint"} {
+	for _, c := range []string{"artisan", "art", "pint"} {
 		_, err = exec.RunHostCommand(DdevBin, "help", c)
 		assert.NoError(err)
 	}

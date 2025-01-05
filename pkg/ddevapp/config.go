@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -21,7 +22,6 @@ import (
 	"github.com/ddev/ddev/pkg/nodeps"
 	"github.com/ddev/ddev/pkg/output"
 	"github.com/ddev/ddev/pkg/util"
-	"github.com/ddev/ddev/pkg/versionconstants"
 	copy2 "github.com/otiai10/copy"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
@@ -92,11 +92,6 @@ func NewApp(appRoot string, includeOverrides bool) (*DdevApp, error) {
 	app.WebserverType = nodeps.WebserverDefault
 	app.SetPerformanceMode(nodeps.PerformanceModeDefault)
 
-	// Turn off Mutagen on Python projects until initial setup can be done
-	if app.WebserverType == nodeps.WebserverNginxGunicorn {
-		app.SetPerformanceMode(types.PerformanceModeNone)
-	}
-
 	app.FailOnHookFail = nodeps.FailOnHookFailDefault
 	app.FailOnHookFailGlobal = globalconfig.DdevGlobalConfig.FailOnHookFailGlobal
 
@@ -124,6 +119,11 @@ func NewApp(appRoot string, includeOverrides bool) (*DdevApp, error) {
 		if err != nil {
 			return app, fmt.Errorf("%v exists but cannot be read. It may be invalid due to a syntax error: %v", app.ConfigPath, err)
 		}
+	}
+
+	// Make "drupal" an alias to latest modern drupal version
+	if app.Type == nodeps.AppTypeDrupal {
+		app.Type = nodeps.AppTypeDrupalLatestStable
 	}
 
 	// Upgrade any pre-v1.19.0 config that has mariadb_version or mysql_version
@@ -174,11 +174,6 @@ func NewApp(appRoot string, includeOverrides bool) (*DdevApp, error) {
 		}
 	}
 
-	// If non-php type, use non-php webserver type
-	if app.WebserverType == nodeps.WebserverDefault && app.Type == nodeps.AppTypeDjango4 {
-		app.WebserverType = nodeps.WebserverNginxGunicorn
-	}
-
 	// TODO: Enable once the bootstrap is clean and every project is loaded once only
 	//app.TrackProject()
 
@@ -199,6 +194,12 @@ func (app *DdevApp) WriteConfig() error {
 	// Only set the images on write if non-default values have been specified.
 	if appcopy.WebImage == docker.GetWebImage() {
 		appcopy.WebImage = ""
+	}
+	if appcopy.RouterHTTPPort == nodeps.DdevDefaultRouterHTTPPort {
+		appcopy.RouterHTTPPort = ""
+	}
+	if appcopy.RouterHTTPSPort == nodeps.DdevDefaultRouterHTTPSPort {
+		appcopy.RouterHTTPSPort = ""
 	}
 	if appcopy.MailpitHTTPPort == nodeps.DdevDefaultMailpitHTTPPort {
 		appcopy.MailpitHTTPPort = ""
@@ -256,34 +257,14 @@ func (app *DdevApp) WriteConfig() error {
 		return err
 	}
 
+	// The .ddev directory may still need to be populated, especially in tests
+	err = PopulateExamplesCommandsHomeadditions(appcopy.Name)
+	if err != nil {
+		return err
+	}
+
 	// Allow project-specific post-config action
 	err = appcopy.PostConfigAction()
-	if err != nil {
-		return err
-	}
-
-	// Write example Dockerfiles into build directories
-	contents := []byte(`
-#ddev-generated
-# You can copy this Dockerfile.example to Dockerfile to add configuration
-# or packages or anything else to your webimage
-# These additions will be appended last to ddev's own Dockerfile
-RUN npm install --global forever
-RUN echo "Built on $(date)" > /build-date.txt
-`)
-
-	err = WriteImageDockerfile(app.GetConfigPath("web-build")+"/Dockerfile.example", contents)
-	if err != nil {
-		return err
-	}
-	contents = []byte(`
-#ddev-generated
-# You can copy this Dockerfile.example to Dockerfile to add configuration
-# or packages or anything else to your dbimage
-RUN echo "Built on $(date)" > /build-date.txt
-`)
-
-	err = WriteImageDockerfile(app.GetConfigPath("db-build")+"/Dockerfile.example", contents)
 	if err != nil {
 		return err
 	}
@@ -514,6 +495,41 @@ func (app *DdevApp) ValidateConfig() error {
 	// 	}
 	// }
 
+	usedNames := make(map[string]bool)
+	usedWebContainerPorts := make(map[int]bool)
+	usedHTTPAndHTTPSPorts := make(map[int]bool)
+	for _, extraPort := range app.WebExtraExposedPorts {
+		if usedNames[extraPort.Name] {
+			return fmt.Errorf("the %s project has a duplicate 'name: %s' in web_extra_exposed_ports", app.Name, extraPort.Name)
+		}
+		usedNames[extraPort.Name] = true
+
+		if extraPort.HTTPPort == extraPort.HTTPSPort {
+			return fmt.Errorf("the %s project has the same 'http_port: %d' and 'https_port: %d' for 'name: %s' in web_extra_exposed_ports", app.Name, extraPort.HTTPPort, extraPort.HTTPSPort, extraPort.Name)
+		}
+
+		for name, port := range map[string]int{"container_port": extraPort.WebContainerPort, "http_port": extraPort.HTTPPort, "https_port": extraPort.HTTPSPort} {
+			if err := dockerutil.ValidatePort(port); err != nil {
+				return fmt.Errorf("the %s project has an invalid '%s: %d' for 'name: %s' in web_extra_exposed_ports", app.Name, name, port, extraPort.Name)
+			}
+		}
+
+		if usedWebContainerPorts[extraPort.WebContainerPort] {
+			return fmt.Errorf("the %s project has a duplicate 'container_port: %d' for 'name: %s' in web_extra_exposed_ports", app.Name, extraPort.WebContainerPort, extraPort.Name)
+		}
+		usedWebContainerPorts[extraPort.WebContainerPort] = true
+
+		if usedHTTPAndHTTPSPorts[extraPort.HTTPPort] {
+			return fmt.Errorf("the %s project has a duplicate 'http_port: %d' for 'name: %s' in web_extra_exposed_ports", app.Name, extraPort.HTTPPort, extraPort.Name)
+		}
+		usedHTTPAndHTTPSPorts[extraPort.HTTPPort] = true
+
+		if usedHTTPAndHTTPSPorts[extraPort.HTTPSPort] {
+			return fmt.Errorf("the %s project has a duplicate 'https_port: %d' for 'name: %s' in web_extra_exposed_ports", app.Name, extraPort.HTTPSPort, extraPort.Name)
+		}
+		usedHTTPAndHTTPSPorts[extraPort.HTTPSPort] = true
+	}
+
 	// Golang on Windows is not able to time.LoadLocation unless
 	// Go is installed... so skip validation on Windows
 	if runtime.GOOS != "windows" {
@@ -586,12 +602,46 @@ func (app *DdevApp) CheckCustomConfig() {
 	ddevDir := filepath.Dir(app.ConfigPath)
 
 	customConfig := false
-	if _, err := os.Stat(filepath.Join(ddevDir, "nginx-site.conf")); err == nil && app.WebserverType == nodeps.WebserverNginxFPM {
-		util.Warning("Using custom nginx configuration in nginx-site.conf")
+
+	mutagenConfigPath := app.GetConfigPath("mutagen/mutagen.yml")
+	sigFound, _ := fileutil.FgrepStringInFile(mutagenConfigPath, nodeps.DdevFileSignature)
+	if !sigFound && app.IsMutagenEnabled() {
+		util.Warning("Using custom mutagen configuration in %s", mutagenConfigPath)
 		customConfig = true
 	}
+
+	if globalconfig.DdevGlobalConfig.IsTraefikRouter() {
+		traefikGlobalConfigPath := filepath.Join(globalconfig.GetGlobalDdevDir(), "traefik")
+		if _, err := os.Stat(traefikGlobalConfigPath); err == nil {
+			traefikGlobalFiles, err := filepath.Glob(filepath.Join(traefikGlobalConfigPath, "static_config.*.yaml"))
+			util.CheckErr(err)
+			if len(traefikGlobalFiles) > 0 {
+				printableFiles, _ := util.ArrayToReadableOutput(traefikGlobalFiles)
+				util.Warning("Using custom global Traefik configuration (use `docker logs ddev-router` for troubleshooting): %v", printableFiles)
+				customConfig = true
+			}
+		}
+		traefikConfigPath := filepath.Join(ddevDir, "traefik/config")
+		if _, err := os.Stat(traefikConfigPath); err == nil {
+			traefikFiles, err := filepath.Glob(filepath.Join(traefikConfigPath, "*.yaml"))
+			util.CheckErr(err)
+			var customTraefikFiles []string
+			for _, traefikFile := range traefikFiles {
+				sigFound, _ = fileutil.FgrepStringInFile(traefikFile, nodeps.DdevFileSignature)
+				if !sigFound {
+					customTraefikFiles = append(customTraefikFiles, traefikFile)
+				}
+			}
+			if len(customTraefikFiles) > 0 {
+				printableFiles, _ := util.ArrayToReadableOutput(customTraefikFiles)
+				util.Warning("Using custom Traefik configuration (use `docker logs ddev-router` for troubleshooting): %v", printableFiles)
+				customConfig = true
+			}
+		}
+	}
+
 	nginxFullConfigPath := app.GetConfigPath("nginx_full/nginx-site.conf")
-	sigFound, _ := fileutil.FgrepStringInFile(nginxFullConfigPath, nodeps.DdevFileSignature)
+	sigFound, _ = fileutil.FgrepStringInFile(nginxFullConfigPath, nodeps.DdevFileSignature)
 	if !sigFound && app.WebserverType == nodeps.WebserverNginxFPM {
 		util.Warning("Using custom nginx configuration in %s", nginxFullConfigPath)
 		customConfig = true
@@ -599,25 +649,27 @@ func (app *DdevApp) CheckCustomConfig() {
 
 	apacheFullConfigPath := app.GetConfigPath("apache/apache-site.conf")
 	sigFound, _ = fileutil.FgrepStringInFile(apacheFullConfigPath, nodeps.DdevFileSignature)
-	if !sigFound && app.WebserverType != nodeps.WebserverNginxFPM {
+	if !sigFound && app.WebserverType == nodeps.WebserverApacheFPM {
 		util.Warning("Using custom apache configuration in %s", apacheFullConfigPath)
 		customConfig = true
 	}
 
-	nginxPath := filepath.Join(ddevDir, "nginx")
-	if _, err := os.Stat(nginxPath); err == nil {
-		nginxFiles, err := filepath.Glob(nginxPath + "/*.conf")
-		util.CheckErr(err)
-		if len(nginxFiles) > 0 {
-			printableFiles, _ := util.ArrayToReadableOutput(nginxFiles)
-			util.Warning("Using nginx snippets: %v", printableFiles)
-			customConfig = true
+	if app.WebserverType == nodeps.WebserverNginxFPM {
+		nginxPath := filepath.Join(ddevDir, "nginx")
+		if _, err := os.Stat(nginxPath); err == nil {
+			nginxFiles, err := filepath.Glob(filepath.Join(nginxPath, "*.conf"))
+			util.CheckErr(err)
+			if len(nginxFiles) > 0 {
+				printableFiles, _ := util.ArrayToReadableOutput(nginxFiles)
+				util.Warning("Using nginx snippets: %v", printableFiles)
+				customConfig = true
+			}
 		}
 	}
 
 	mysqlPath := filepath.Join(ddevDir, "mysql")
 	if _, err := os.Stat(mysqlPath); err == nil {
-		mysqlFiles, err := filepath.Glob(mysqlPath + "/*.cnf")
+		mysqlFiles, err := filepath.Glob(filepath.Join(mysqlPath, "*.cnf"))
 		util.CheckErr(err)
 		if len(mysqlFiles) > 0 {
 			printableFiles, _ := util.ArrayToReadableOutput(mysqlFiles)
@@ -628,7 +680,7 @@ func (app *DdevApp) CheckCustomConfig() {
 
 	phpPath := filepath.Join(ddevDir, "php")
 	if _, err := os.Stat(phpPath); err == nil {
-		phpFiles, err := filepath.Glob(phpPath + "/*.ini")
+		phpFiles, err := filepath.Glob(filepath.Join(phpPath, "*.ini"))
 		util.CheckErr(err)
 		if len(phpFiles) > 0 {
 			printableFiles, _ := util.ArrayToReadableOutput(phpFiles)
@@ -637,9 +689,28 @@ func (app *DdevApp) CheckCustomConfig() {
 		}
 	}
 
+	for _, buildType := range []string{"web-build", "db-build"} {
+		customDockerPath := filepath.Join(ddevDir, buildType)
+		if _, err := os.Stat(customDockerPath); err == nil {
+			dockerFiles, err := filepath.Glob(filepath.Join(customDockerPath, "Dockerfile*"))
+			util.CheckErr(err)
+			preDockerFiles, err := filepath.Glob(filepath.Join(customDockerPath, "pre.Dockerfile*"))
+			util.CheckErr(err)
+			dockerFiles = append(dockerFiles, preDockerFiles...)
+			dockerFiles = slices.DeleteFunc(dockerFiles, func(s string) bool {
+				return strings.HasSuffix(s, ".example")
+			})
+			if len(dockerFiles) > 0 {
+				printableFiles, _ := util.ArrayToReadableOutput(dockerFiles)
+				util.Warning("Using custom %s configuration: %v", buildType, printableFiles)
+				customConfig = true
+			}
+		}
+	}
+
 	webEntrypointPath := filepath.Join(ddevDir, "web-entrypoint.d")
 	if _, err := os.Stat(webEntrypointPath); err == nil {
-		entrypointFiles, err := filepath.Glob(webEntrypointPath + "/*.sh")
+		entrypointFiles, err := filepath.Glob(filepath.Join(webEntrypointPath, "*.sh"))
 		util.CheckErr(err)
 		if len(entrypointFiles) > 0 {
 			printableFiles, _ := util.ArrayToReadableOutput(entrypointFiles)
@@ -786,11 +857,12 @@ type composeYAMLVars struct {
 	IsGitpod                        bool
 	IsCodespaces                    bool
 	DefaultContainerTimeout         string
+	StartScriptTimeout              string
 	UseHostDockerInternalExtraHosts bool
 	WebExtraHTTPPorts               string
 	WebExtraHTTPSPorts              string
 	WebExtraExposedPorts            string
-	EnvFile                         string
+	BitnamiVolumeDir                string
 }
 
 // RenderComposeYAML renders the contents of .ddev/.ddev-docker-compose*.
@@ -825,6 +897,16 @@ func (app *DdevApp) RenderComposeYAML() (string, error) {
 		return "", err
 	}
 
+	timezone := app.Timezone
+	if timezone == "" {
+		timezone, err = util.GetLocalTimezone()
+		if err != nil {
+			util.Debug("Unable to autodetect timezone: %v", err.Error())
+		} else {
+			util.Debug("Using automatically detected timezone: TZ=%s", timezone)
+		}
+	}
+
 	templateVars := composeYAMLVars{
 		Name:                      app.Name,
 		Plugin:                    "ddev",
@@ -852,7 +934,7 @@ func (app *DdevApp) RenderComposeYAML() (string, error) {
 		MountType:          "bind",
 		WebMount:           "../",
 		Hostnames:          app.GetHostnames(),
-		Timezone:           app.Timezone,
+		Timezone:           timezone,
 		ComposerVersion:    app.ComposerVersion,
 		Username:           username,
 		UID:                uid,
@@ -874,18 +956,15 @@ func (app *DdevApp) RenderComposeYAML() (string, error) {
 		IsCodespaces:       nodeps.IsCodespaces(),
 		// Default max time we wait for containers to be healthy
 		DefaultContainerTimeout: app.DefaultContainerTimeout,
+		StartScriptTimeout:      app.GetStartScriptTimeout(),
 		// Only use the extra_hosts technique for Linux and only if not WSL2 and not Colima
 		// If WSL2 we have to figure out other things, see GetHostDockerInternalIP()
 		UseHostDockerInternalExtraHosts: (runtime.GOOS == "linux" && !nodeps.IsWSL2() && !dockerutil.IsColima()) || (nodeps.IsWSL2() && globalconfig.DdevGlobalConfig.XdebugIDELocation == globalconfig.XdebugIDELocationWSL2),
+		BitnamiVolumeDir:                "",
 	}
 	// We don't want to bind-mount Git directory if it doesn't exist
 	if fileutil.IsDirectory(filepath.Join(app.AppRoot, ".git")) {
 		templateVars.GitDirMount = true
-	}
-
-	envFile := app.GetConfigPath(".env")
-	if fileutil.FileExists(envFile) {
-		templateVars.EnvFile = envFile
 	}
 
 	webimageExtraHTTPPorts := []string{}
@@ -907,6 +986,11 @@ func (app *DdevApp) RenderComposeYAML() (string, error) {
 
 	if app.Database.Type == nodeps.Postgres {
 		templateVars.DBMountDir = "/var/lib/postgresql/data"
+	}
+	// TODO: Determine if mount to /bitnami is for all mysql/bitnami or just newest
+	// If we expand to using bitnami for mariadb this will change.
+	if app.Database.Type == nodeps.MySQL && (app.Database.Version == nodeps.MySQL80 || app.Database.Version == nodeps.MySQL84) {
+		templateVars.BitnamiVolumeDir = "/bitnami/mysql"
 	}
 	if app.IsNFSMountEnabled() {
 		templateVars.MountType = "volume"
@@ -965,24 +1049,12 @@ ENV N_INSTALL_VERSION="%s"
 	if app.CorepackEnable {
 		extraWebContent = extraWebContent + "\nRUN corepack enable"
 	}
-	if app.Type == nodeps.AppTypeDrupal {
-		// TODO: When ddev-webserver has required drupal 11+ sqlite version we can remove this.
-		// These packages must be retrieved from snapshot.debian.org. We hope they'll be there
-		// when we need them.
-		drupalVersion, err := GetDrupalVersion(app)
-		if err == nil && drupalVersion == "11" {
-			extraWebContent = extraWebContent + "\n" + fmt.Sprintf(`
-### Drupal 11+ requires a minimum sqlite3 version (3.45 currently)
-ARG SQLITE_VERSION=%s
-RUN ( mkdir -p /tmp/sqlite3 && \
-wget -O /tmp/sqlite3/sqlite3.deb https://snapshot.debian.org/archive/debian/20240203T152533Z/pool/main/s/sqlite3/sqlite3_${SQLITE_VERSION}-1_${TARGETPLATFORM##linux/}.deb && \
-wget -O /tmp/sqlite3/libsqlite3.deb https://snapshot.debian.org/archive/debian/20240203T152533Z/pool/main/s/sqlite3/libsqlite3-0_${SQLITE_VERSION}-1_${TARGETPLATFORM##linux/}.deb && \
-apt-get install -y /tmp/sqlite3/*.deb && \
-rm -rf /tmp/sqlite3 ) || true
-			`, versionconstants.Drupal11RequiredSqlite3Version)
-		}
+	// TODO: When we have this from upstream Debian 13 Trixie, we must remove this condition
+	if app.Type == nodeps.AppTypeDrupal11 {
+		extraWebContent = extraWebContent + `
+### DDEV-injected SQLite 3.45.1 is required for Drupal 11 tests, change the project type if you don't need this
+RUN apt-get install -y /usr/local/sqlite3-drupal11/*.deb`
 	}
-
 	// Add supervisord config for WebExtraDaemons
 	var supervisorGroup []string
 	for _, appStart := range app.WebExtraDaemons {
@@ -1015,11 +1087,11 @@ redirect_stderr=true
 	}
 	// For MySQL 5.5+ we'll install the matching mysql client (and mysqldump) in the ddev-webserver
 	if app.Database.Type == nodeps.MySQL {
-		extraWebContent = extraWebContent + "\nRUN mysql-client-install.sh || true\n"
+		extraWebContent = extraWebContent + fmt.Sprintf("\nRUN START_SCRIPT_TIMEOUT=%s mysql-client-install.sh || true\n", app.GetStartScriptTimeout())
 	}
 	// Some MariaDB versions may have their own client in the ddev-webserver
 	if app.Database.Type == nodeps.MariaDB {
-		extraWebContent = extraWebContent + "\nRUN mariadb-client-install.sh || true\n"
+		extraWebContent = extraWebContent + fmt.Sprintf("\nRUN START_SCRIPT_TIMEOUT=%s mariadb-client-install.sh || true\n", app.GetStartScriptTimeout())
 	}
 
 	err = WriteBuildDockerfile(app, app.GetConfigPath(".webimageBuild/Dockerfile"), app.GetConfigPath("web-build"), app.WebImageExtraPackages, app.ComposerVersion, extraWebContent)
@@ -1036,23 +1108,23 @@ redirect_stderr=true
 		// However, they do have a postgres:11-bullseye, but we won't start using it yet
 		// because of awkward changes to $DBIMAGE. PostgreSQL 11 will be EOL Nov 2023
 		if nodeps.ArrayContainsString([]string{nodeps.Postgres9, nodeps.Postgres10, nodeps.Postgres11}, app.Database.Version) {
-			extraDBContent = extraDBContent + `
+			extraDBContent = extraDBContent + fmt.Sprintf(`
 RUN rm -f /etc/apt/sources.list.d/pgdg.list
 RUN echo "deb http://archive.debian.org/debian/ stretch main contrib non-free" > /etc/apt/sources.list
-RUN apt-get update || true
+RUN timeout %s apt-get update || true
 RUN apt-get -y install apt-transport-https
 RUN printf "deb http://apt-archive.postgresql.org/pub/repos/apt/ stretch-pgdg main" > /etc/apt/sources.list.d/pgdg.list
-`
+`, app.GetMinimalContainerTimeout())
 		}
-		extraDBContent = extraDBContent + `
+		extraDBContent = extraDBContent + fmt.Sprintf(`
 ENV PATH=$PATH:/usr/lib/postgresql/$PG_MAJOR/bin
 ADD postgres_healthcheck.sh /
 RUN chmod ugo+rx /postgres_healthcheck.sh
 RUN mkdir -p /etc/postgresql/conf.d && chmod 777 /etc/postgresql/conf.d
 RUN echo "*:*:db:db:db" > ~postgres/.pgpass && chown postgres:postgres ~postgres/.pgpass && chmod 600 ~postgres/.pgpass && chmod 777 /var/tmp && ln -sf /mnt/ddev_config/postgres/postgresql.conf /etc/postgresql && echo "restore_command = 'true'" >> /var/lib/postgresql/recovery.conf
 RUN printf "# TYPE DATABASE USER CIDR-ADDRESS  METHOD \nhost  all  all 0.0.0.0/0 md5\nlocal all all trust\nhost    replication    db             0.0.0.0/0  trust\nhost replication all 0.0.0.0/0 trust\nlocal replication all trust\nlocal replication all peer\n" >/etc/postgresql/pg_hba.conf
-RUN (apt-get update || true) && DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::="--force-confold" --no-install-recommends --no-install-suggests bzip2 less procps pv vim
-`
+RUN (timeout %s apt-get update || true) && DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::="--force-confold" --no-install-recommends --no-install-suggests bzip2 less procps pv vim
+`, app.GetMinimalContainerTimeout())
 	}
 
 	err = WriteBuildDockerfile(app, app.GetConfigPath(".dbimageBuild/Dockerfile"), app.GetConfigPath("db-build"), app.DBImageExtraPackages, "", extraDBContent)
@@ -1109,10 +1181,19 @@ func WriteBuildDockerfile(app *DdevApp, fullpath string, userDockerfilePath stri
 #ddev-generated - Do not modify this file; your modifications will be overwritten.
 
 ### DDEV-injected base Dockerfile contents
-ARG BASE_IMAGE
+ARG BASE_IMAGE="scratch"
 FROM $BASE_IMAGE
 SHELL ["/bin/bash", "-c"]
 `
+	// bitnami/mysql inappropriately sets ENV HOME=/, see https://github.com/bitnami/containers/issues/75578
+	// Setting HOME="" allows it to have its normal behavior for the added user.
+	if app.Database.Type == nodeps.MySQL && (app.Database.Version == nodeps.MySQL80 || app.Database.Version == nodeps.MySQL84) {
+		contents = contents + `
+ENV HOME=""
+`
+	}
+
+	//  The ENV HOME="" is added for bitnami/mysql habit of overriding ENV HOME=/
 	contents = contents + `
 ARG TARGETPLATFORM
 ARG TARGETARCH
@@ -1122,22 +1203,38 @@ ARG uid
 ARG gid
 ARG DDEV_PHP_VERSION
 ARG DDEV_DATABASE
-RUN (groupadd --gid $gid "$username" || groupadd "$username" || true) && (useradd  -l -m -s "/bin/bash" --gid "$username" --comment '' --uid $uid "$username" || useradd  -l -m -s "/bin/bash" --gid "$username" --comment '' "$username" || useradd  -l -m -s "/bin/bash" --gid "$gid" --comment '' "$username" || useradd -l -m -s "/bin/bash" --comment '' $username )
+RUN getent group tty || groupadd tty
+RUN (groupadd --gid $gid "$username" || groupadd "$username" || true) && (useradd -G tty -l -m -s "/bin/bash" --gid "$username" --comment '' --uid $uid "$username" || useradd -G tty -l -m -s "/bin/bash" --gid "$username" --comment '' "$username" || useradd  -G tty -l -m -s "/bin/bash" --gid "$gid" --comment '' "$username" || useradd -G tty -l -m -s "/bin/bash" --comment '' $username )
 `
+
 	// If there are user pre.Dockerfile* files, insert their contents
 	if userDockerfilePath != "" {
-		files, err := filepath.Glob(userDockerfilePath + "/pre.Dockerfile*")
+		files, err := filepath.Glob(filepath.Join(userDockerfilePath, "pre.Dockerfile*"))
 		if err != nil {
 			return err
 		}
 
 		for _, file := range files {
+			// Skip example files
+			if strings.HasSuffix(file, ".example") {
+				continue
+			}
 			userContents, err := fileutil.ReadFileIntoString(file)
 			if err != nil {
 				return err
 			}
 
 			contents = contents + "\n\n### From user Dockerfile " + file + ":\n" + userContents
+		}
+	}
+
+	// If our PHP version is not already provided in the ddev-webserver, add it now
+	if strings.Contains(fullpath, "webimageBuild") {
+		if _, ok := nodeps.PreinstalledPHPVersions[app.PHPVersion]; !ok {
+			contents = contents + fmt.Sprintf(`
+### DDEV-injected addition of not-preinstalled PHP version
+RUN START_SCRIPT_TIMEOUT=%s /usr/local/bin/install_php_extensions.sh "php%s" "${TARGETARCH}"
+`, app.GetStartScriptTimeout(), app.PHPVersion)
 		}
 	}
 
@@ -1149,13 +1246,16 @@ RUN (groupadd --gid $gid "$username" || groupadd "$username" || true) && (userad
 	}
 
 	if extraPackages != nil {
-		contents = contents + `
+		contents = contents + fmt.Sprintf(`
 ### DDEV-injected from webimage_extra_packages or dbimage_extra_packages
-RUN (apt-get -qq update || true) && DEBIAN_FRONTEND=noninteractive apt-get -qq install -y -o Dpkg::Options::="--force-confold" --no-install-recommends --no-install-suggests ` + strings.Join(extraPackages, " ") + "\n"
+RUN (timeout %s apt-get update || true) && DEBIAN_FRONTEND=noninteractive apt-get install -y -o Dpkg::Options::="--force-confold" --no-install-recommends --no-install-suggests %v
+`, app.GetMinimalContainerTimeout(), strings.Join(extraPackages, " "))
 	}
 
-	// For webimage, update to latest Composer.
+	// webimage only things
 	if strings.Contains(fullpath, "webimageBuild") {
+
+		// For webimage, update to latest Composer.
 		// Version to run composer self-update to the version
 		var composerSelfUpdateArg string
 
@@ -1180,8 +1280,19 @@ RUN (apt-get -qq update || true) && DEBIAN_FRONTEND=noninteractive apt-get -qq i
 		// selecting a branch instead of a major version only.
 		contents = contents + fmt.Sprintf(`
 ### DDEV-injected composer update
-RUN export XDEBUG_MODE=off; composer self-update --stable || composer self-update --stable || true; composer self-update %s || composer self-update %s || true
+RUN export XDEBUG_MODE=off; composer self-update --stable || composer self-update --stable || true; composer self-update %s || log-stderr.sh composer self-update %s || true
 `, composerSelfUpdateArg, composerSelfUpdateArg)
+
+		if _, ok := nodeps.PreinstalledPHPVersions[app.PHPVersion]; !ok {
+			contents = contents + fmt.Sprintf(`
+### DDEV-injected php default version setting
+RUN update-alternatives --set php /usr/bin/php%s
+RUN chmod ugo+rw /var/log/php-fpm.log && chmod ugo+rwx /var/run && ln -sf /usr/sbin/php-fpm%s /usr/sbin/php-fpm
+RUN mkdir -p /tmp/xhprof
+RUN chmod -fR ugo+w /etc/php /var/lib/php/modules /tmp/xhprof
+RUN phpdismod blackfire xdebug xhprof
+`, app.PHPVersion, app.PHPVersion)
+		}
 
 		// For Postgres, install the relevant PostgreSQL clients
 		if app.Database.Type == nodeps.Postgres {
@@ -1190,26 +1301,27 @@ RUN export XDEBUG_MODE=off; composer self-update --stable || composer self-updat
 				psqlVersion = "9.6"
 			}
 			contents = contents + fmt.Sprintf(`
+### DDEV-injected postgresql-client setup
 RUN EXISTING_PSQL_VERSION=$(psql --version | awk -F '[\. ]*' '{ print $3 }'); \
 if [ "${EXISTING_PSQL_VERSION}" != "%s" ]; then \
-  apt-get remove -y postgresql-client-${EXISTING_PSQL_VERSION} && \
-  apt-get update >/dev/null && \
-  apt-get install -y postgresql-client-%s || true; \
-fi`, app.Database.Version, psqlVersion) + "\n\n"
+  log-stderr.sh --timeout %s bash -c "apt-get update -o Dir::Etc::sourcelist="sources.list.d/pgdg.sources" -o Dir::Etc::sourceparts="-" -o APT::Get::List-Cleanup="0" && \
+  apt-get install -y postgresql-client-%s && \
+  apt-get remove -y postgresql-client-${EXISTING_PSQL_VERSION}" || true; \
+fi`, app.Database.Version, app.GetStartScriptTimeout(), psqlVersion) + "\n\n"
 		}
 
 	}
 
 	// If there are user dockerfiles, appends their contents
 	if userDockerfilePath != "" {
-		files, err := filepath.Glob(userDockerfilePath + "/Dockerfile*")
+		files, err := filepath.Glob(filepath.Join(userDockerfilePath, "Dockerfile*"))
 		if err != nil {
 			return err
 		}
 
 		for _, file := range files {
-			// Skip the example file
-			if file == userDockerfilePath+"/Dockerfile.example" {
+			// Skip example files
+			if strings.HasSuffix(file, ".example") {
 				continue
 			}
 
@@ -1230,9 +1342,13 @@ fi`, app.Database.Version, psqlVersion) + "\n\n"
 	}
 
 	// Assets in the web-build directory copied to .webimageBuild so .webimageBuild can be "context"
-	// This actually copies the Dockerfile, but it is then immediately overwritten by WriteImageDockerfile()
 	if userDockerfilePath != "" {
-		err = copy2.Copy(userDockerfilePath, filepath.Dir(fullpath))
+		err = copy2.Copy(userDockerfilePath, filepath.Dir(fullpath), copy2.Options{
+			Skip: func(_ os.FileInfo, src, _ string) (bool, error) {
+				// Do not copy file if it's not a context file
+				return isNotDockerfileContextFile(userDockerfilePath, src)
+			},
+		})
 		if err != nil {
 			return err
 		}
@@ -1246,6 +1362,7 @@ fi`, app.Database.Version, psqlVersion) + "\n\n"
 		contents = contents + fmt.Sprintf(`
 ### DDEV-injected folders permission fix
 RUN chmod 777 /run/php /var/log
+RUN mkdir -p /tmp/xhprof && chmod -R ugo+w /etc/php /var/lib/php /tmp/xhprof
 `)
 	}
 
@@ -1319,15 +1436,6 @@ func DiscoverDefaultDocroot(app *DdevApp) string {
 			}
 		}
 	}
-	dir, err := fileutil.FindFilenameInDirectory(app.AppRoot, []string{"manage.py"})
-	if err == nil && dir != "" {
-		defaultDocroot, err = filepath.Rel(app.AppRoot, dir)
-		if err != nil {
-			util.Warning("failed to filepath.Rel(%s, %s): %v", app.AppRoot, dir, err)
-			defaultDocroot = ""
-		}
-	}
-
 	return defaultDocroot
 }
 
@@ -1335,8 +1443,8 @@ func DiscoverDefaultDocroot(app *DdevApp) string {
 func (app *DdevApp) docrootPrompt() error {
 
 	// Determine the document root.
-	util.Warning("\nThe docroot is the directory from which your site is served.\nThis is a relative path from your project root at %s", app.AppRoot)
-	output.UserOut.Println("You may leave this value blank if your site files are in the project root")
+	output.UserOut.Printf("\nThe docroot is the directory from which your site is served.\nThis is a relative path from your project root at %s\n", app.AppRoot)
+	output.UserOut.Printf("Leave docroot empty (hit <RETURN>) to use the location shown in parentheses.\nOr specify a custom path if your index.php is in a different directory.\n")
 	var docrootPrompt = "Docroot Location"
 	var defaultDocroot = DiscoverDefaultDocroot(app)
 	// If there is a default docroot, display it in the prompt.
@@ -1382,7 +1490,7 @@ func (app *DdevApp) AppTypePrompt() error {
 	// If we found an application type set it and inform the user.
 	util.Success("Found a %s codebase at %s.", detectedAppType, filepath.Join(app.AppRoot, app.Docroot))
 
-	validAppTypes := strings.Join(GetValidAppTypesWithoutAliases(), ", ")
+	validAppTypes := strings.Join(GetValidAppTypes(), ", ")
 	typePrompt := "Project Type [%s] (%s): "
 
 	defaultAppType := app.Type
@@ -1421,14 +1529,9 @@ func PrepDdevDirectory(app *DdevApp) error {
 		}
 	}
 
-	err = os.MkdirAll(filepath.Join(dir, "web-entrypoint.d"), 0755)
-	if err != nil {
-		return err
-	}
-
 	// Some of the listed items are wildcards or directories, and if they are, there's an error
 	// opening them and they innately get added to the .gitignore.
-	err = CreateGitIgnore(dir, "**/*.example", ".dbimageBuild", ".ddev-docker-*.yaml", ".*downloads", ".homeadditions", ".importdb*", ".sshimageBuild", ".venv", ".webimageBuild", "apache/apache-site.conf", "commands/.gitattributes", "config.local.y*ml", "db_snapshots", "mutagen/mutagen.yml", "mutagen/.start-synced", "nginx_full/nginx-site.conf", "postgres/postgresql.conf", "providers/acquia.yaml", "providers/lagoon.yaml", "providers/pantheon.yaml", "providers/platform.yaml", "providers/upsun.yaml", "sequelpro.spf", "settings/settings.ddev.py", fmt.Sprintf("traefik/config/%s.yaml", app.Name), fmt.Sprintf("traefik/certs/%s.crt", app.Name), fmt.Sprintf("traefik/certs/%s.key", app.Name), "xhprof/xhprof_prepend.php", "**/README.*")
+	err = CreateGitIgnore(dir, "**/*.example", ".dbimageBuild", ".ddev-docker-*.yaml", ".*downloads", ".homeadditions", ".importdb*", ".sshimageBuild", ".webimageBuild", "apache/apache-site.conf", "commands/.gitattributes", "config.local.y*ml", "config.*.local.y*ml", "db_snapshots", "mutagen/mutagen.yml", "mutagen/.start-synced", "nginx_full/nginx-site.conf", "postgres/postgresql.conf", "providers/acquia.yaml", "providers/lagoon.yaml", "providers/pantheon.yaml", "providers/platform.yaml", "providers/upsun.yaml", "sequelpro.spf", fmt.Sprintf("traefik/config/%s.yaml", app.Name), fmt.Sprintf("traefik/certs/%s.crt", app.Name), fmt.Sprintf("traefik/certs/%s.key", app.Name), "xhprof/xhprof_prepend.php", "**/README.*")
 	if err != nil {
 		return fmt.Errorf("failed to create gitignore in %s: %v", dir, err)
 	}
@@ -1510,4 +1613,36 @@ func validateHookYAML(source []byte) error {
 	}
 
 	return nil
+}
+
+// isNotDockerfileContextFile returns true if the given file is NOT a Dockerfile context file
+// We consider files in the .ddev/web-build and .ddev/db-build directory to be context files
+// excluding /Dockerfile*, /pre.Dockerfile*, and /README.txt
+func isNotDockerfileContextFile(userDockerfilePath string, file string) (bool, error) {
+	// Directories are always context.
+	if fileutil.IsDirectory(file) {
+		return false, nil
+	}
+	// Get the relative path of the file from userDockerfilePath
+	relPath, err := filepath.Rel(userDockerfilePath, file)
+	if err != nil {
+		return false, err
+	}
+	// If this is not a top-level file, it's a context file
+	if strings.Contains(relPath, string(filepath.Separator)) {
+		return false, nil
+	}
+	filename := filepath.Base(file)
+	// Return true for not context Dockerfiles
+	if strings.HasPrefix(filename, "Dockerfile") || strings.HasPrefix(filename, "pre.Dockerfile") {
+		return true, nil
+	}
+	// Return true for not context README.txt if it is managed by DDEV
+	if filename == "README.txt" {
+		if err := fileutil.CheckSignatureOrNoFile(file, nodeps.DdevFileSignature); err == nil {
+			return true, nil
+		}
+	}
+	// Otherwise, it's a context file
+	return false, nil
 }

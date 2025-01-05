@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 	"testing"
 
 	"github.com/ddev/ddev/pkg/output"
 	"github.com/ddev/ddev/pkg/util"
 	asrt "github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestRandString ensures that RandString only generates string of the correct value and characters.
@@ -193,4 +195,95 @@ func TestArrayToReadableOutput(t *testing.T) {
 
 	_, err := util.ArrayToReadableOutput([]string{})
 	assert.EqualErrorf(err, "empty slice", "Expected error when passing an empty slice")
+}
+
+// TestGetTimezone tests GetTimezone
+func TestGetTimezone(t *testing.T) {
+	testCases := []struct {
+		description string
+		input       string
+		result      string
+		error       string
+	}{
+		{"$TZ env var", "Europe/London", "Europe/London", ""},
+		{"Linux /etc/localtime symlink", "/usr/share/zoneinfo/Europe/London", "Europe/London", ""},
+		{"Linux /etc/localtime posix symlink", "/usr/share/zoneinfo/posix/Europe/London", "Europe/London", ""},
+		{"Linux /etc/localtime right symlink", "/usr/share/zoneinfo/right/Europe/London", "Europe/London", ""},
+		{"/etc/localtime is not a symlink", "/etc/localtime", "", "unable to read timezone from /etc/localtime"},
+		{"macOS /etc/localtime symlink", "/var/db/timezone/zoneinfo/Europe/London", "Europe/London", ""},
+		{"macOS Sonoma /etc/localtime symlink", "/private/var/db/timezone/tz/2024a.1.0/zoneinfo/Europe/London", "Europe/London", ""},
+		{"macOS Sequoia /etc/localtime symlink", "/usr/share/zoneinfo.default/Europe/London", "Europe/London", ""},
+		{"Case-insensitive search for /zoneinfo/ in the path", "/path/to/TestZoneInfoTest/Europe/London", "Europe/London", ""},
+		{"Timezone has wrong format", "/Europe/London", "", "unable to read timezone from /Europe/London"},
+		{"Not real timezone", "Europe/Test", "", "unable to read timezone from Europe/Test"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.description, func(t *testing.T) {
+			timezone, err := util.GetTimezone(tc.input)
+			require.Equal(t, tc.result, timezone)
+			if tc.error == "" {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tc.error)
+			}
+		})
+	}
+}
+
+// compareSlices checks if two slices are equal after sorting them.
+func compareSlices(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	// Sort both slices before comparing
+	sort.Strings(a)
+	sort.Strings(b)
+
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// TestSubtractSlices does simple test of SubtractSlices
+func TestSubtractSlices(t *testing.T) {
+	tests := []struct {
+		name     string
+		a        []string
+		b        []string
+		expected []string
+	}{
+		{
+			name:     "No overlap",
+			a:        []string{"apple", "banana", "cherry"},
+			b:        []string{"date", "fig"},
+			expected: []string{"apple", "banana", "cherry"},
+		},
+		{
+			name:     "Partial overlap",
+			a:        []string{"apple", "banana", "cherry"},
+			b:        []string{"banana"},
+			expected: []string{"apple", "cherry"},
+		},
+		{
+			name:     "Complete overlap",
+			a:        []string{"apple", "banana"},
+			b:        []string{"apple", "banana"},
+			expected: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := util.SubtractSlices(tt.a, tt.b)
+			if !compareSlices(result, tt.expected) {
+				t.Errorf("SubtractSlices(%v, %v) = %v; want %v", tt.a, tt.b, result, tt.expected)
+			}
+		})
+	}
 }

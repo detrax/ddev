@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/ddev/ddev/pkg/ddevapp"
 	"github.com/ddev/ddev/pkg/dockerutil"
@@ -146,8 +147,8 @@ func TestGetLocalHTTPResponse(t *testing.T) {
 		err = app.Stop(true, false)
 		assert.NoError(err)
 
-		app.RouterHTTPSPort = "443"
-		app.RouterHTTPPort = "80"
+		app.RouterHTTPSPort = ""
+		app.RouterHTTPPort = ""
 		err = app.WriteConfig()
 		assert.NoError(err)
 
@@ -192,33 +193,29 @@ func TestGetLocalHTTPResponse(t *testing.T) {
 // TestGetCachedArchive tests download and extraction of archives for test sites
 // to testcache directory.
 func TestGetCachedArchive(t *testing.T) {
-	assert := asrt.New(t)
-
 	sourceURL := "https://raw.githubusercontent.com/ddev/ddev/master/.gitignore"
 	exPath, archPath, err := GetCachedArchive("TestInvalidArchive", "test", "", sourceURL)
-	assert.Error(err)
+	require.Error(t, err)
 	if err != nil {
-		assert.Contains(err.Error(), fmt.Sprintf("archive extraction of %s failed", archPath))
+		require.Contains(t, err.Error(), fmt.Sprintf("archive extraction of %s failed", archPath))
 	}
 
 	err = os.RemoveAll(exPath)
-	assert.NoError(err)
+	require.NoError(t, err)
 
 	err = os.RemoveAll(archPath)
-	assert.NoError(err)
+	require.NoError(t, err)
 
 	sourceURL = "http://invalid_domain/somefilethatdoesnotexists"
 	exPath, archPath, err = GetCachedArchive("TestInvalidDownloadURL", "test", "", sourceURL)
-	assert.Error(err)
-	if err != nil {
-		assert.Contains(err.Error(), fmt.Sprintf("failed to download url=%s into %s", sourceURL, archPath))
-	}
+	require.Error(t, err)
+	require.Contains(t, err.Error(), fmt.Sprintf("failed to download url=%s into %s", sourceURL, archPath))
 
 	err = os.RemoveAll(exPath)
-	assert.NoError(err)
+	require.NoError(t, err)
 
 	err = os.RemoveAll(archPath)
-	assert.NoError(err)
+	require.NoError(t, err)
 }
 
 // TestPretestAndEnv tests that the testsite PretestCmd works along with WebEvironment
@@ -230,7 +227,7 @@ func TestPretestAndEnv(t *testing.T) {
 	site := TestSites[0]
 	site.Name = t.Name()
 
-	_, _ = exec.RunCommand(DdevBin, []string{"stop", "-RO", site.Name})
+	_, _ = exec.RunCommand(DdevBin, []string{"delete", "-Oy", site.Name})
 
 	site.WebEnvironment = []string{"SOMEVAR=somevar"}
 	site.PretestCmd = fmt.Sprintf("%s exec 'touch /var/tmp/%s'", DdevBin, t.Name())
@@ -254,6 +251,14 @@ func TestPretestAndEnv(t *testing.T) {
 		err = os.Chdir(origDir)
 		assert.NoError(err)
 	})
+
+	if runtime.GOOS == "windows" && app.IsMutagenEnabled() {
+		// We can't replace mutagen.exe on windows if anything has been using it
+		ddevapp.PowerOff()
+		err = ddevapp.MutagenReset(app)
+		require.NoError(t, err)
+		time.Sleep(1000 * time.Millisecond)
+	}
 
 	err = app.Start()
 	require.NoError(t, err)

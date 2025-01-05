@@ -21,29 +21,39 @@ search:
 * Discord
 * Docker
 
-### Actual secrets required
+### Environment variables required
+
+These are normally configured in the repository environment variables.
+
+* `AUR_EDGE_GIT_URL`: The Git URL for AUR edge (normally `ddev-edge-bin`), for example `ssh://aur@aur.archlinux.org/ddev-edge-bin.git`.
+* `AUR_PACKAGE_NAME`: The base name of the AUR package. Normally `ddev` for production, but `ddev-test` for testing repository.
+* `AUR_STABLE_GIT_URL`: The Git URL for AUR stable (normally `ddev-bin`), for example `ssh://aur@aur.archlinux.org/ddev-bin.git`.
+* `DDEV_WINDOWS_SIGN`: If the value is `"true"` then `make` will attempt to sign the Windows executables, which requires building on our self-hosted Windows runner.
+* `DOCKER_ORG`: the organization on `hub.docker.org` to push to. Currently `ddev` on `ddev/ddev` and `ddevhq` on `ddev-test/ddev`.
+* `DOCKERHUB_USERNAME`: Username for pushing to `hub.docker.com` or updating image descriptions. Usually `ddevmachinepush`.
+* `FURY_ACCOUNT`: [Gemfury](https://gemfury.com) account that receives package pushes. `drud` on `ddev/ddev` for historical reasons, and `rfay` on `ddev-test/ddev` because that's a spare account there.
+* `HOMEBREW_EDGE_REPOSITORY`: Like `ddev/homebrew-ddev-edge` but might be another repository like be `ddev-test/homebrew-ddev-edge`.
+* `HOMEBREW_STABLE_REPOSITORY`: Like `ddev/homebrew-ddev` but might be another repository like `ddev-test/homebrew-ddev`.
+
+### GitHub Actions Secrets Required
+
+* `AMPLITUDE_API_KEY`: Key that enables Amplitude reporting. Environment variable for Make is `AmplitudeAPIKey`. Unfortunately, the `1password/load-secrets-action` does not work with Windows (see [issue](https://github.com/1Password/load-secrets-action/issues/46)).
+* `AMPLITUDE_API_KEY_DEV`: Key that enables Amplitude reporting for development versions e.g. a PR build. Environment variable for Make is `AmplitudeAPIKey`.
+
+### 1Password secrets required
 
 <!-- markdown-link-check-disable-next-line -->
-The following “Repository secret” environment variables must be added to <https://github.com/ddev/ddev/settings/secrets/actions>:
+The following “Repository secret” environment variables must be configured in 1Password:
 
-* `AMPLITUDE_API_KEY`: Key that enables Amplitude reporting. Environment variable for Make is `AmplitudeAPIKey`.
-* `AMPLITUDE_API_KEY_DEV`: Key that enables Amplitude reporting for development versions e.g. a PR build. Environment variable for Make is `AmplitudeAPIKey`.
-* `AUR_EDGE_GIT_URL`: The Git URL for AUR edge (normally `ddev-edge-bin`), for example `ssh://aur@aur.archlinux.org/ddev-edge-bin.git`.
-* `AUR_STABLE_GIT_URL`: The Git URL for AUR stable (normally `ddev-bin`), for example `ssh://aur@aur.archlinux.org/ddev-bin.git`.
 * `AUR_SSH_PRIVATE_KEY`: Private SSH key for the `ddev-releaser` user. This must be processed into a single line, for example, `perl -p -e 's/\n/<SPLIT>/' ~/.ssh/id_rsa_ddev_releaser| pbcopy`.
 * `CHOCOLATEY_API_KEY`: API key for Chocolatey.
 * `DDEV_GITHUB_TOKEN`: GitHub personal token (`repo` scope, classic PAT) that gives access to create releases and push to the Homebrew repositories.
 * `DDEV_MACOS_APP_PASSWORD`: Password used for notarization, see [signing_tools](https://github.com/ddev/signing_tools).
 * `DDEV_MACOS_SIGNING_PASSWORD`: Password for the macOS signing key, see [signing_tools](https://github.com/ddev/signing_tools).
-* `DDEV_MAIN_REPO_ORGNAME`: The organization to be used for testing, normally `ddev` but it may be `ddev-test` for the test organization.
 * `DDEV_WINDOWS_SIGNING_PASSWORD`: Windows signing password.
-* `DOCKERHUB_USERNAME`: Username for pushing to `hub.docker.com` or updating image descriptions.
 * `DOCKERHUB_TOKEN`: Token for pushing to `hub.docker.com`. or updating image descriptions.
-* `FURY_ACCOUNT`: [Gemfury](https://gemfury.com) account that receives package pushes.
 * `FURY_TOKEN`: Push token assigned to the above Gemfury account.
 * `GORELEASER_KEY`: License key for GoReleaser Pro.
-* `HOMEBREW_EDGE_REPOSITORY`: Like `ddev/homebrew-ddev-edge` but may be `ddev-test/homebrew-ddev-edge`.
-* `HOMEBREW_STABLE_REPOSITORY`: Like `ddev/homebrew-ddev-edge` but may be `ddev/homebrew-ddev-edge`.
 
 ## Creating a Release
 
@@ -57,26 +67,12 @@ The following “Repository secret” environment variables must be added to <ht
 * Update `ddev/ddev-webserver` to use the new version of `ddev/ddev-php-base` and push it with the proper tag.
 * Make sure the Docker images are all tagged and pushed.
 * Make sure [`pkg/versionconstants/versionconstants.go`](https://github.com/ddev/ddev/blob/master/pkg/versionconstants/versionconstants.go) is all set to point to the new images and tests have been run.
-* If the [`devcontainer-feature.json`](https://github.com/ddev/ddev/blob/master/.github/devcontainers/src/install-ddev/devcontainer-feature.json) (for GitHub Codespaces) needs to be updated, use the [`devcontainer` CLI](https://github.com/devcontainers/cli) and a `GITHUB_TOKEN` that has power to manage packages (`write:packages` scope, classic PAT), change the version in the [`devcontainer-feature.json`](https://github.com/ddev/ddev/blob/master/.github/devcontainers/src/install-ddev/devcontainer-feature.json) and run:
-
-    ```bash
-    cd .github/devcontainers/src
-    export GITHUB_TOKEN=<personal-access-token-with-power-to-manage-packages>
-    devcontainer features publish -n ddev/ddev .
-    ```
 
 ### Actual Release Creation
 
 1. Create a [release](https://github.com/ddev/ddev/releases) for the new version using the GitHub UI. It should be “prerelease” if it’s an edge release.
 2. Make sure you're about to create the right release tag.
 3. Use the “Auto-generate release notes” option to get the commit list, then edit to add all the other necessary info.
-
-### Post-Release Tasks
-
-1. After the release has been created, the new gitpod image must be pushed.
-    1. `cd .gitpod/images && DOCKER_TAG="<YYMMDD>" ./push.sh`
-    2. PR to update `.gitpod.yml` with the new image.
-    3. PR to update [ddev-gitpod-launcher](https://github.com/ddev/ddev-gitpod-launcher) with the new image.
 
 ## Pushing Docker Images with the GitHub Actions Workflow
 
@@ -108,22 +104,18 @@ If you need to push from a forked PR, you’ll have to do this from your fork (f
 While it’s more error-prone, images can be pushed from the command line:
 
 1. `docker login` with a user that has push privileges.
-2. `docker buildx create --name ddev-builder-multi --use` or if it already exists, `docker buildx use ddev-builder-multi`.
+2. `docker buildx use multi-arch-builder || docker buildx create --name multi-arch-builder --use`.
 3. `cd containers/<image>`.
 4. Before pushing `ddev-webserver`, make sure you’ve pushed a version of `ddev-php-base` and updated `ddev-webserver`’s Dockerfile to use that as a base.
 5. `make push VERSION=<release_version> DOCKER_ARGS=--no-cache` for most of the images. For `ddev-dbserver` it’s `make PUSH=true VERSION=<release_version> DOCKER_ARGS=--no-cache`. There’s a [push-all.sh](https://github.com/ddev/ddev/blob/master/containers/push-all.sh) script to update all of them, but it takes forever.
 6. `ddev-dbserver` images can be pushed with `make PUSH=true VERSION=<release_version> DOCKER_ARGS=--no-cache` from the `containers/ddev-dbserver` directory.
 
-## Maintaining `ddev-dbserver` MySQL 5.7 and 8.0 ARM64 Images
+## Maintaining `ddev-dbserver` MySQL 5.7 ARM64 Images
 
-Sadly, there are no ARM64 Docker images for MySQL 5.7 and 8.0, so we have our own process to maintain [ddev/mysql-arm64-images](https://github.com/ddev/mysql-arm64-images) and [ddev/xtrabackup-build](https://github.com/ddev/xtrabackup-build) images for DDEV.
+We don't currently have a way to get `xtrabackup` for ARM64 Docker images for MySQL 5.7, so we have our own process to maintain [ddev/mysql-arm64-images](https://github.com/ddev/mysql-arm64-images), which uses Ubuntu 18.04 Docker images, where `xtrabackup` was available.
 
 * `ddev/mysql:5.7` uses Ubuntu 18.04 as the base image, and Ubuntu 18.04 ARM64 has `mysql-server` 5.7 in it, so we can install.
-* `ddev/mysql:8.0` uses Ubuntu 20.04 as the base image, and Ubuntu 20.04 ARM64 has `mysql-server` 8.0 in it, so we can install it from packages.
-* Unfortunately, the [`ddev snapshot`](../users/usage/commands.md#snapshot) command depends on `xtrabackup` 8.0 being installed for `mysql:8.0`. There are no ARM64 packages or binaries provided by Percona for `xtrabackup`, so we build it from source with [ddev/xtrabackup-build](https://github.com/ddev/xtrabackup-build). **There’s a catch, however:** `xtrabackup`’s development cycle lags behind `mysql:8.0`’s development cycle, so you can’t build a usable `ddev/mysql:8.0` image until there’s an `xtrabackup` version released. Further, when Ubuntu bumps `mysql-server-8.0` to a new version, there’s no way to use the old one. So the only time that you can maintain `ddev/mysql:8.0` is when Ubuntu 20.04 has the same version that’s released for `percona-xtrabackup`. (In the case at this writeup, I was finally able to build `percona-xtrabackup` 8.0.28, and the same day Ubuntu bumped its packages to 8.0.29, meaning that it was unusable.)
-* To build percona-xtrabackup, follow the instructions on [ddev/xtrabackup-build](https://github.com/ddev/xtrabackup-build). Create a release with the release of Percona xtrabackup, for example `8.0.29-21`. When that succeeds, then there is an upstream xtrabackup to be used in the ddev/mysql:8.0 build.
-* To build `ddev/mysql` (both 5.7 and 8.0) ARM64 images, follow the instructions on [ddev/mysql-arm64-images](https://github.com/ddev/mysql-arm64-images). After the various files are updated, you can push a new release and the proper images will be pushed.
-* After building a new set of `ddev/mysql` images, you’ll need to push `ddev/ddev-dbserver` with new tags. Make sure to update the [ddev/`ddev-dbserver` Makefile](https://github.com/ddev/ddev/blob/master/containers/ddev-dbserver/Makefile) to set the explicit version of the upstream `mysql:8.0` (for example, 8.0.29, if you’ve succeeded in getting 8.0.29 for `percona-xtrabackup` and `mysql:8.0`).
+* To build `ddev/mysql` (5.7) ARM64 images, follow the instructions on [ddev/mysql-arm64-images](https://github.com/ddev/mysql-arm64-images). After the files, you can push a new release and the proper images will be pushed. Since MySQL 5.7 (and Ubuntu 18.04) are EOL, it's unlikely that there will be any new minor releases.
 
 ## Actual Release Docker Image Updates
 
@@ -133,7 +125,7 @@ But here are the steps for building:
 
 1. The `ddev/ddev-php-base` image must be updated as necessary with a new tag before pushing `ddev-webserver`. You can do this using the [process above](#pushing-docker-images-with-the-github-actions-workflow).
 2. The `ddev/ddev-webserver` Dockerfile must `FROM ddev/ddev-php-base:<tag>` before building/pushing `ddev-webserver`. But then it can be pushed using either the GitHub Actions or the manual technique.
-3. If you’re bumping `ddev-dbserver` 8.0 minor release, follow the upstream [Maintaining ddev-dbserver MySQL 5.7 & 8.0 ARM64 Images](#maintaining-ddev-dbserver-mysql-57-and-80-arm64-images) instructions.
+3. If you’re bumping `ddev-dbserver` 8.0 minor release, follow the upstream [Maintaining ddev-dbserver MySQL 5.7](#maintaining-ddev-dbserver-mysql-57-arm64-images) instructions.
 4. Update `pkg/version/version.go` with the correct versions for the new images, and run all the tests.
 
 ## Manually Updating Homebrew Formulas
@@ -172,7 +164,7 @@ docker run --rm -v $PWD:/tmp/chocolatey -w /tmp/chocolatey linuturk/mono-choco p
 
 The AUR repository normally updates with the release process, so nothing needs to be done.
 
-However, you can manually publish the release to [the DDEV AUR repository](https://aur.archlinux.org/packages/ddev-bin/). The README.md in the AUR Git repository (`ssh://aur@aur.archlinux.org/ddev-bin.git` or `https://aur.archlinux.org/ddev-bin.git`) has instructions on how to update, including how to do it with a Docker container, so it doesn’t have to be done on an ArchLinux or Manjaro VM.
+However, you can manually publish the release to [the DDEV AUR repository](https://aur.archlinux.org/packages/ddev-bin/). The README.md in the AUR Git repository (`https://aur.archlinux.org/ddev-bin.git`) has instructions on how to update, including how to do it with a Docker container, so it doesn’t have to be done on an ArchLinux or Manjaro VM.
 
 ## Manually Signing the Windows Installer
 
@@ -187,7 +179,7 @@ This is done automatically by the release build on a dedicated Windows test runn
 1. Install the suggested [Windows SDK](https://developer.microsoft.com/en-us/windows/downloads/windows-sdk/). Only the signing component is required.
 2. Add the path of the kit binaries to the Windows system PATH, `C:/Program Files (x86)/Windows Kits/10/bin/10.0.22621.0/x64/`.
 3. The keyfob and Safenet Authentication Client must be installed. The best documentation for the Safenet software is at <https://support.globalsign.com/ssl/ssl-certificates-installation/safenet-drivers>. You must configure the advanced client settings to “Enable single logon” or it will require the password on each run.
-4. After `make windows_install` the `ddev-windows-installer.exe` will be in `.ddev/bin/windows_amd64/ddev_windows_installer.exe` and you can sign it with `signtool sign ddev-windows-installer.exe`.
+4. After `make windows_amd64_install` the `ddev_windows_amd64_installer.exe` will be in `.ddev/bin/windows_amd64/ddev_windows_amd64_installer.exe` and you can sign it with `signtool sign ddev_windows_amd64_installer.exe`.
 5. If you need to install the GitHub self-hosted Windows runner, do it with the instructions in project settings → Actions → Runners.
 6. Currently the `actions/cache` runner does not work out of the box on Windows, so you have to install tar and zstd as described in [this issue](https://github.com/actions/cache/issues/580#issuecomment-1165839728).
 
@@ -219,17 +211,13 @@ Prerequisites:
 * `export GORELEASER_KEY=<key>`
 
 ```bash
-export GITHUB_REPOSITORY_OWNER=ddev-test
+export REPOSITORY_OWNER=ddev-test
 git tag <tagname> # Try to include context like PR number, for example v1.22.8-PR5824
 make windows_amd64 windows_arm64 darwin_amd64 darwin_arm64 linux_amd64 linux_arm64 completions
 goreleaser release --prepare --nightly --clean
 ```
 
-This will create all the artifacts that would have been pushed in the `dist` directory. You can copy Linux packages from there to test them manually, download the built tarballs for use elsewhere, install Homebrew package manually, for example:
-
-```bash
-brew install ./dist/homebrew/Formula/ddev.rb
-```
+This will create all the artifacts that would have been pushed in the `dist` directory. You can copy Linux packages from there to test them manually, download the built tarballs for use elsewhere.
 
 ### Creating a test release on `ddev-test/ddev`
 

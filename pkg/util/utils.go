@@ -9,6 +9,7 @@ import (
 	osexec "os/exec"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -387,4 +388,69 @@ func Chmod(path string, mode os.FileMode) error {
 		return nil
 	}
 	return os.Chmod(path, mode)
+}
+
+// GetTimezone tries to find local timezone from the path, that can be
+// either $TZ environment variable or /etc/localtime symlink
+func GetTimezone(path string) (string, error) {
+	// Use case-insensitive search for /zoneinfo/ in the file path.
+	regex := regexp.MustCompile(`(?i)/.*?zoneinfo.*?/`)
+	parts := regex.Split(strings.TrimSpace(path), 2)
+	if len(parts) != 2 {
+		// If this is not a path, but timezone, return it.
+		_, err := time.LoadLocation(path)
+		if err == nil {
+			return path, nil
+		}
+		return "", fmt.Errorf("unable to read timezone from %s", path)
+	}
+	timezone := parts[1]
+	// Remove leading prefixes if they exist.
+	// https://stackoverflow.com/a/67888343/8097891
+	for _, prefix := range []string{"posix/", "right/"} {
+		timezone = strings.TrimPrefix(timezone, prefix)
+	}
+	if timezone == "" {
+		return "", fmt.Errorf("unable to read timezone from %s", path)
+	}
+	_, err := time.LoadLocation(timezone)
+	if err != nil {
+		return "", fmt.Errorf("failed to load timezone '%s': %v", timezone, err)
+	}
+	return timezone, nil
+}
+
+// GetLocalTimezone tries to find local timezone from $TZ or /etc/localtime symlink
+func GetLocalTimezone() (string, error) {
+	timezone := ""
+	if os.Getenv("TZ") != "" {
+		timezone = os.Getenv("TZ")
+	} else {
+		localtimeFile := filepath.Join("/etc", "localtime")
+		var err error
+		timezone, err = filepath.EvalSymlinks(localtimeFile)
+		if err != nil {
+			return "", fmt.Errorf("unable to read timezone from %s file: %v", localtimeFile, err)
+		}
+	}
+	return GetTimezone(timezone)
+}
+
+// SubtractSlices removes elements of slice b from slice a.
+func SubtractSlices(a, b []string) []string {
+	// Create a map to keep track of elements in slice b for quick lookup.
+	bMap := make(map[string]bool)
+	for _, elem := range b {
+		bMap[elem] = true
+	}
+
+	// Collect elements from a that are not in b.
+	var result []string
+	for _, elem := range a {
+		if _, found := bMap[elem]; !found {
+			result = append(result, elem)
+		}
+	}
+
+	return result
 }

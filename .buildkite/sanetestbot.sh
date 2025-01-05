@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Check a testbot or test environment to make sure it's likely to be sane.
 # We should add to this script whenever a testbot fails and we can figure out why.
@@ -49,11 +49,6 @@ CURRENT_DDEV_VERSION=$(ddev --version | awk '{ print $3 }')
 if command -v ddev >/dev/null && version_gt ${MIN_DDEV_VERSION} ${CURRENT_DDEV_VERSION} ; then
   echo "ddev version in $(command -v ddev) is inadequate: $(ddev --version)"
   exit 4
-fi
-
-# Skip nfs check on linux/lima, as we won't run nfs there
-if [ ${OSTYPE%%-gnu} != "linux" ] && [ ${DOCKER_TYPE:-nothing} != "lima" ]; then
-  $(dirname $0)/nfstest.sh
 fi
 
 echo "-- testbot $HOSTNAME seems to be set up OK --"

@@ -384,9 +384,15 @@ func (app *DdevApp) MutagenStatus() (status string, shortResult string, mapResul
 		if _, ok = alpha["scanProblems"]; ok {
 			problems = true
 		}
+		if _, ok = alpha["transitionProblems"]; ok {
+			problems = true
+		}
 	}
 	if beta, ok := session["beta"].(map[string]interface{}); ok {
 		if _, ok = beta["scanProblems"]; ok {
+			problems = true
+		}
+		if _, ok = beta["transitionProblems"]; ok {
 			problems = true
 		}
 	}
@@ -753,11 +759,11 @@ func CheckMutagenVolumeSyncCompatibility(app *DdevApp) (ok bool, volumeExists bo
 	if mutagenSyncExists {
 		mutagenLabel, mutagenSyncLabelErr = GetMutagenSyncLabel(app)
 		if mutagenSyncLabelErr != nil {
-			util.Warning("Mutagen sync session '%s' exists but unable to get sync label '%s': '%v' This is normal on upgrade from v1.21.6; error=%v", app.Name, mutagenSignatureLabelName, mutagenLabel, mutagenSyncLabelErr)
+			util.Warning("Mutagen sync session '%s' exists but unable to get sync label '%s': '%v' This happens when changing Docker providers; error=%v", app.Name, mutagenSignatureLabelName, mutagenLabel, mutagenSyncLabelErr)
 		}
 		configFileHashLabel, configFileHashLabelErr = GetMutagenConfigFileHashLabel(app)
 		if configFileHashLabelErr != nil {
-			util.Warning("Mutagen sync session '%s' exists but unable to get sync label '%s': '%v' This is normal on upgrade from v1.21.6; error=%v", app.Name, mutagenConfigFileHashLabelName, configFileHashLabel, configFileHashLabelErr)
+			util.Warning("Mutagen sync session '%s' exists but unable to get sync label '%s': '%v' This happens when changing Docker providers; error=%v", app.Name, mutagenConfigFileHashLabelName, configFileHashLabel, configFileHashLabelErr)
 		}
 	}
 	switch {

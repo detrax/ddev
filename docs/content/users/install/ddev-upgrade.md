@@ -31,8 +31,8 @@ Installing and upgrading DDEV are nearly the same thing, because you're upgradin
         Use the `-s` argument to specify a specific stable or prerelease version:
 
         ```bash
-        # Download and run the script to update to DDEV v1.21.4
-        curl -fsSL https://ddev.com/install.sh | bash -s v1.21.4
+        # Download and run the script to update to DDEV v1.23.5
+        curl -fsSL https://ddev.com/install.sh | bash -s v1.23.5
         ```
 
 === "Linux"
@@ -85,7 +85,7 @@ Installing and upgrading DDEV are nearly the same thing, because you're upgradin
 
     ### Traditional Windows
 
-    #### Chocolatey
+    #### Chocolatey (only on Intel machines)
 
     ```bash
     # Turn off DDEV and upgrade it
@@ -94,7 +94,7 @@ Installing and upgrading DDEV are nearly the same thing, because you're upgradin
 
     #### Installer
 
-    Download and run the Windows installer for the latest [DDEV release](https://github.com/ddev/ddev/releases) (`ddev_windows_installer.<version>.exe`).
+    Download and run the Windows installer (for your architecture, most often AMD64) for the latest [DDEV release](https://github.com/ddev/ddev/releases) (`ddev_windows_<architecture>_installer.<version>.exe`).
 
 === "Gitpod"
 

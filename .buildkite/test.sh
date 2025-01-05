@@ -1,12 +1,15 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # This script is used to build ddev/ddev using buildkite
 
 set -eu -o pipefail
 
 export PATH=$PATH:/home/linuxbrew/.linuxbrew/bin
 
-# GOTEST_SHORT=12 means drupal10
-export GOTEST_SHORT=12
+# GOTEST_SHORT=16 means drupal11
+export GOTEST_SHORT=16
+if [ ${OSTYPE:-unknown}  = "msys" ]; then export GOTEST_SHORT=true; fi
+
+export DDEV_SKIP_NODEJS_TEST=true
 
 export DOCKER_SCAN_SUGGEST=false
 export DOCKER_SCOUT_SUGGEST=false
@@ -25,8 +28,10 @@ if [ "${OSTYPE%%[0-9]*}" = "darwin" ]; then
     docker context use default
     # Leave orbstack running as the most likely to be reliable, otherwise Docker Desktop
     if command -v orb 2>/dev/null ; then
+      docker context use orbstack
       echo "Starting orbstack" && (nohup orb start &)
     else
+      docker context use desktop-linux
       open -a Docker
     fi
     sleep 5
@@ -191,12 +196,8 @@ fi
 unset MUTAGEN_DATA_DIRECTORY
 if [ -f ~/.ddev/bin/mutagen -o -f ~/.ddev/bin/mutagen.exe ]; then
   MUTAGEN_DATA_DIRECTORY=~/.ddev_mutagen_data_directory/ ~/.ddev/bin/mutagen sync terminate -a || true
-  # This line can be removed when all PRs will not use ~/.ddev/.mdd
-  MUTAGEN_DATA_DIRECTORY=~/.ddev/.mdd/ ~/.ddev/bin/mutagen sync terminate -a || true
   MUTAGEN_DATA_DIRECTORY=~/.mutagen ~/.ddev/bin/mutagen daemon stop || true
   MUTAGEN_DATA_DIRECTORY=~/.ddev_mutagen_data_directory/ ~/.ddev/bin/mutagen daemon stop || true
-  # This line can be removed when all PRs will not use ~/.ddev/.mdd
-  MUTAGEN_DATA_DIRECTORY=~/.ddev/.mdd/ ~/.ddev/bin/mutagen daemon stop || true
 fi
 if command -v killall >/dev/null ; then
   killall mutagen || true

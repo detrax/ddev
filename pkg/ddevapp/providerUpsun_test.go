@@ -60,7 +60,7 @@ func TestUpsunPull(t *testing.T) {
 	app, err := ddevapp.NewApp(siteDir, true)
 	assert.NoError(err)
 	app.Name = t.Name()
-	app.Type = nodeps.AppTypeDrupal
+	app.Type = nodeps.AppTypeDrupal11
 	err = app.Stop(true, false)
 	require.NoError(t, err)
 	err = app.WriteConfig()
@@ -86,8 +86,8 @@ func TestUpsunPull(t *testing.T) {
 	provider, err := app.GetProvider("upsun")
 	require.NoError(t, err)
 
-	provider.EnvironmentVariables["UPSUN_PROJECT"] = upsunTestSiteID
-	provider.EnvironmentVariables["UPSUN_ENVIRONMENT"] = upsunPullTestSiteEnvironment
+	provider.EnvironmentVariables["PLATFORM_PROJECT"] = upsunTestSiteID
+	provider.EnvironmentVariables["PLATFORM_ENVIRONMENT"] = upsunPullTestSiteEnvironment
 	provider.EnvironmentVariables["UPSUN_CLI_TOKEN"] = token
 
 	err = app.Start()
@@ -131,7 +131,7 @@ func TestUpsunPush(t *testing.T) {
 	})
 
 	app.Name = t.Name()
-	app.Type = nodeps.AppTypeDrupal
+	app.Type = nodeps.AppTypeDrupal11
 	app.Hooks = map[string][]ddevapp.YAMLTask{"post-push": {{"exec-host": "touch hello-post-push-" + app.Name}}, "pre-push": {{"exec-host": "touch hello-pre-push-" + app.Name}}}
 	_ = app.Stop(true, false)
 
@@ -148,8 +148,8 @@ func TestUpsunPush(t *testing.T) {
 	provider, err := app.GetProvider("upsun")
 	require.NoError(t, err)
 
-	provider.EnvironmentVariables["UPSUN_PROJECT"] = upsunTestSiteID
-	provider.EnvironmentVariables["UPSUN_ENVIRONMENT"] = upsunPushTestSiteEnvironment
+	provider.EnvironmentVariables["PLATFORM_PROJECT"] = upsunTestSiteID
+	provider.EnvironmentVariables["PLATFORM_ENVIRONMENT"] = upsunPushTestSiteEnvironment
 	provider.EnvironmentVariables["UPSUN_CLI_TOKEN"] = token
 
 	err = app.Start()

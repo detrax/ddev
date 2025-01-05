@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -48,6 +49,7 @@ type ComposeCmdOpts struct {
 	ComposeFiles []string
 	Action       []string
 	Progress     bool // Add dots every second while the compose command is running
+	Timeout      time.Duration
 }
 
 // NoHealthCheck is a HealthConfig that disables any existing healthcheck when
@@ -159,7 +161,7 @@ func GetDockerClient() (context.Context, *dockerClient.Client) {
 	if DockerHost == "" {
 		DockerContext, DockerHost, err = GetDockerContext()
 		// ddev --version may be called without Docker client or context available, ignore err
-		if err != nil && len(os.Args) > 1 && os.Args[1] != "--version" && os.Args[1] != "hostname" {
+		if err != nil && !CanRunWithoutDocker() {
 			util.Failed("Unable to get Docker context: %v", err)
 		}
 		util.Debug("GetDockerClient: DockerContext=%s, DockerHost=%s", DockerContext, DockerHost)
@@ -344,6 +346,37 @@ func FindContainersWithLabel(label string) ([]dockerTypes.Container, error) {
 	return containers, nil
 }
 
+// FindImagesByLabels takes a map of label names and values and returns any Docker images which match all labels.
+// danglingOnly is used to return only dangling images, otherwise return all of them, including dangling.
+func FindImagesByLabels(labels map[string]string, danglingOnly bool) ([]dockerImage.Summary, error) {
+	if len(labels) < 1 {
+		return []dockerImage.Summary{{}}, fmt.Errorf("the provided list of labels was empty")
+	}
+	filterList := dockerFilters.NewArgs()
+	for k, v := range labels {
+		label := fmt.Sprintf("%s=%s", k, v)
+		// If no value is specified, filter any value by the key.
+		if v == "" {
+			label = k
+		}
+		filterList.Add("label", label)
+	}
+
+	if danglingOnly {
+		filterList.Add("dangling", "true")
+	}
+
+	ctx, client := GetDockerClient()
+	images, err := client.ImageList(ctx, dockerImage.ListOptions{
+		All:     true,
+		Filters: filterList,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return images, nil
+}
+
 // NetExists checks to see if the Docker network for DDEV exists.
 func NetExists(ctx context.Context, client *dockerClient.Client, name string) bool {
 	nets, _ := client.NetworkList(ctx, dockerNetwork.ListOptions{})
@@ -400,7 +433,7 @@ func ContainerWait(waittime int, labels map[string]string) (string, error) {
 				health, _ := GetContainerHealth(container)
 				if health != "healthy" {
 					name, suggestedCommand := getSuggestedCommandForContainerLog(container)
-					desc = desc + fmt.Sprintf(" %s:%s - more info with %s", name, health, suggestedCommand)
+					desc = desc + fmt.Sprintf(" %s:%s\nTroubleshoot this with these commands:\n%s", name, health, suggestedCommand)
 				}
 			}
 			return "", fmt.Errorf("health check timed out after %v: labels %v timed out without becoming healthy, status=%v, detail=%s ", durationWait, labels, status, desc)
@@ -417,10 +450,10 @@ func ContainerWait(waittime int, labels map[string]string) (string, error) {
 				return logOutput, nil
 			case "unhealthy":
 				name, suggestedCommand := getSuggestedCommandForContainerLog(container)
-				return logOutput, fmt.Errorf("%s container is unhealthy: %s, more info with %s", name, logOutput, suggestedCommand)
+				return logOutput, fmt.Errorf("%s container is unhealthy, log=%s\nTroubleshoot this with these commands: \n%s", name, logOutput, suggestedCommand)
 			case "exited":
 				name, suggestedCommand := getSuggestedCommandForContainerLog(container)
-				return logOutput, fmt.Errorf("%s container exited, more info with %s", name, suggestedCommand)
+				return logOutput, fmt.Errorf("%s container exited,\nTroubleshoot this with these commands:\n%s", name, suggestedCommand)
 			}
 		}
 	}
@@ -451,7 +484,7 @@ func ContainersWait(waittime int, labels map[string]string) error {
 					health, _ := GetContainerHealth(&container)
 					if health != "healthy" {
 						name, suggestedCommand := getSuggestedCommandForContainerLog(&container)
-						desc = desc + fmt.Sprintf(" %s:%s - more info with %s", name, health, suggestedCommand)
+						desc = desc + fmt.Sprintf(" %s:%s\nTroubleshoot this with these commands:\n%s", name, health, suggestedCommand)
 					}
 				}
 			}
@@ -471,10 +504,10 @@ func ContainersWait(waittime int, labels map[string]string) error {
 					continue
 				case "unhealthy":
 					name, suggestedCommand := getSuggestedCommandForContainerLog(&container)
-					return fmt.Errorf("%s container is unhealthy: %s, more info with %s", name, logOutput, suggestedCommand)
+					return fmt.Errorf("%s container is unhealthy, log=%s\nTroubleshoot this with these commands:\n%s", name, logOutput, suggestedCommand)
 				case "exited":
 					name, suggestedCommand := getSuggestedCommandForContainerLog(&container)
-					return fmt.Errorf("%s container exited, more info with %s", name, suggestedCommand)
+					return fmt.Errorf("%s container exited.\nTroubleshoot this with these commands:\n%s", name, suggestedCommand)
 				default:
 					allHealthy = false
 				}
@@ -512,7 +545,7 @@ func ContainerWaitLog(waittime int, labels map[string]string, expectedLog string
 				health, _ := GetContainerHealth(container)
 				if health != "healthy" {
 					name, suggestedCommand := getSuggestedCommandForContainerLog(container)
-					desc = desc + fmt.Sprintf(" %s:%s - more info with %s", name, health, suggestedCommand)
+					desc = desc + fmt.Sprintf(" %s:%s\nTroubleshoot this with these commands:\n%s", name, health, suggestedCommand)
 				}
 			}
 			return "", fmt.Errorf("health check timed out: labels %v timed out without becoming healthy, status=%v, detail=%s ", labels, status, desc)
@@ -529,10 +562,10 @@ func ContainerWaitLog(waittime int, labels map[string]string, expectedLog string
 				return logOutput, nil
 			case status == "unhealthy":
 				name, suggestedCommand := getSuggestedCommandForContainerLog(container)
-				return logOutput, fmt.Errorf("%s container is unhealthy: %s, more info with %s", name, logOutput, suggestedCommand)
+				return logOutput, fmt.Errorf("%s container is unhealthy, log=%s\nTroubleshoot this with these commands:\n%s", name, logOutput, suggestedCommand)
 			case status == "exited":
 				name, suggestedCommand := getSuggestedCommandForContainerLog(container)
-				return logOutput, fmt.Errorf("%s container exited, more info with %s", name, suggestedCommand)
+				return logOutput, fmt.Errorf("%s container exited\nTroubleshoot this with these commands:\n%s", name, suggestedCommand)
 			}
 		}
 	}
@@ -598,7 +631,7 @@ func GetContainerHealth(container *dockerTypes.Container) (string, string) {
 	if status != "" {
 		numLogs := len(inspect.State.Health.Log)
 		if numLogs > 0 {
-			logOutput = fmt.Sprintf("%v", inspect.State.Health.Log[numLogs-1])
+			logOutput = fmt.Sprintf("%v", inspect.State.Health.Log[numLogs-1].Output)
 		}
 	} else {
 		// Some containers may not have a healthcheck. In that case
@@ -611,7 +644,7 @@ func GetContainerHealth(container *dockerTypes.Container) (string, string) {
 		}
 	}
 
-	return status, logOutput
+	return status, strings.TrimSpace(logOutput)
 }
 
 // ComposeWithStreams executes a docker-compose command but allows the caller to specify
@@ -669,7 +702,13 @@ func ComposeCmd(cmd *ComposeCmdOpts) (string, string, error) {
 		return "", "", err
 	}
 
-	proc := exec.Command(path, arg...)
+	ctx := context.Background()
+	if cmd.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, cmd.Timeout)
+		defer cancel()
+	}
+	proc := exec.CommandContext(ctx, path, arg...)
 	proc.Stdout = &stdout
 	proc.Stdin = os.Stdin
 
@@ -688,7 +727,7 @@ func ComposeCmd(cmd *ComposeCmdOpts) (string, string, error) {
 	// Container (or Volume) ... Creating or Created or Stopping or Starting or Removing
 	// Container Stopped or Created
 	// No resource found to remove (when doing a stop and no project exists)
-	ignoreRegex := "(^ *(Network|Container|Volume) .* (Creat|Start|Stopp|Remov)ing$|^Container .*(Stopp|Creat)(ed|ing)$|Warning: No resource found to remove|Pulling fs layer|Waiting|Downloading|Extracting|Verifying Checksum|Download complete|Pull complete)"
+	ignoreRegex := "(^ *(Network|Container|Volume|Service) .* (Creat|Start|Stopp|Remov|Build|Buil)(ing|t)$|^Container .*(Stopp|Creat)(ed|ing)$|Warning: No resource found to remove|Pulling fs layer|Waiting|Downloading|Extracting|Verifying Checksum|Download complete|Pull complete)"
 	downRE, err := regexp.Compile(ignoreRegex)
 	if err != nil {
 		util.Warning("Failed to compile regex %v: %v", ignoreRegex, err)
@@ -718,6 +757,9 @@ func ComposeCmd(cmd *ComposeCmdOpts) (string, string, error) {
 		done <- true
 	}
 
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return stdout.String(), stderr, fmt.Errorf("composeCmd timed out after %v and failed to run 'COMPOSE_PROJECT_NAME=%s docker-compose %v', action='%v', err='%v', stdout='%s', stderr='%s'", cmd.Timeout, os.Getenv("COMPOSE_PROJECT_NAME"), strings.Join(arg, " "), cmd.Action, err, stdout.String(), stderr)
+	}
 	if err != nil {
 		return stdout.String(), stderr, fmt.Errorf("composeCmd failed to run 'COMPOSE_PROJECT_NAME=%s docker-compose %v', action='%v', err='%v', stdout='%s', stderr='%s'", os.Getenv("COMPOSE_PROJECT_NAME"), strings.Join(arg, " "), cmd.Action, err, stdout.String(), stderr)
 	}
@@ -795,7 +837,7 @@ func CheckDockerVersion(versionConstraint string) error {
 		for _, err := range errs {
 			msgs = fmt.Sprint(msgs, err, "\n")
 		}
-		return fmt.Errorf(msgs)
+		return fmt.Errorf("%s", msgs)
 	}
 	return nil
 }
@@ -835,7 +877,7 @@ func CheckDockerCompose() error {
 		for _, err := range errs {
 			msgs = fmt.Sprint(msgs, err, "\n")
 		}
-		return fmt.Errorf(msgs)
+		return fmt.Errorf("%s", msgs)
 	}
 
 	return nil
@@ -887,9 +929,9 @@ func GetDockerIP() (string, error) {
 				addr := net.ParseIP(hostPart)
 				if addr == nil {
 					// If it wasn't an IP address, look it up to get IP address
-					ip, err := net.LookupHost(hostPart)
+					ip, err := net.DefaultResolver.LookupIP(context.Background(), "ip4", hostPart)
 					if err == nil && len(ip) > 0 {
-						hostPart = ip[0]
+						hostPart = ip[0].String()
 					} else {
 						return "", fmt.Errorf("failed to look up IP address for $DOCKER_HOST=%s, hostname=%s: %v", dockerHostRawURL, hostPart, err)
 					}
@@ -1015,7 +1057,7 @@ func RunSimpleContainer(image string, name string, cmd []string, entrypoint []st
 
 	_, err = stdcopy.StdCopy(&stdout, &stdout, rc)
 	if err != nil {
-		return container.ID, "", fmt.Errorf("failed to copy container logs: %v", err)
+		util.Warning("failed to copy container logs: %v", err)
 	}
 
 	// This is the exitCode from the cli.ContainerWait()
@@ -1629,7 +1671,21 @@ func IsLima() bool {
 		util.Warning("IsLima(): Unable to get Docker info, err=%v", err)
 		return false
 	}
-	if strings.HasPrefix(info.Name, "lima") {
+	if info.Name != "lima-rancher-desktop" && strings.HasPrefix(info.Name, "lima") {
+		return true
+	}
+	return false
+}
+
+// IsRancherDesktop detects if running on Rancher Desktop
+func IsRancherDesktop() bool {
+	ctx, client := GetDockerClient()
+	info, err := client.Info(ctx)
+	if err != nil {
+		util.Warning("IsRancherDesktop(): Unable to get Docker info, err=%v", err)
+		return false
+	}
+	if strings.HasPrefix(info.Name, "lima-rancher-desktop") {
 		return true
 	}
 	return false
@@ -1871,9 +1927,67 @@ func GetLiveDockerComposeVersion() (string, error) {
 	return globalconfig.DockerComposeVersion, nil
 }
 
+// GetContainerNames takes an array of Container
+// and returns an array of strings with container names
+func GetContainerNames(containers []dockerTypes.Container, excludeContainerNames []string) []string {
+	var names []string
+	for _, container := range containers {
+		if len(container.Names) == 0 {
+			continue
+		}
+		name := container.Names[0][1:] // Trimming the leading '/' from the container name
+		if slices.Contains(excludeContainerNames, name) {
+			continue
+		}
+		names = append(names, name)
+	}
+	return names
+}
+
 // IsErrNotFound returns true if the error is a NotFound error, which is returned
 // by the API when some object is not found. It is an alias for [errdefs.IsNotFound].
 // Used as a wrapper to avoid direct import for docker client.
 func IsErrNotFound(err error) bool {
 	return dockerClient.IsErrNotFound(err)
+}
+
+// CanRunWithoutDocker returns true if the command or flag can run without Docker.
+func CanRunWithoutDocker() bool {
+	if len(os.Args) < 2 {
+		return true
+	}
+	// Check the first arg
+	if slices.Contains([]string{"-v", "--version", "-h", "--help", "help", "hostname"}, os.Args[1]) {
+		return true
+	}
+	// Check the last arg
+	if slices.Contains([]string{"-h", "--help"}, os.Args[len(os.Args)-1]) {
+		// Some commands don't support Cobra help, because they are wrappers
+		if slices.Contains([]string{"composer"}, os.Args[1]) {
+			return false
+		}
+		return true
+	}
+	return false
+}
+
+// ValidatePort checks that the given port is valid (in range 1-65535)
+func ValidatePort(port interface{}) error {
+	var dockerPort int
+	switch v := port.(type) {
+	case int:
+		dockerPort = v
+	case string:
+		var err error
+		dockerPort, err = strconv.Atoi(v)
+		if err != nil {
+			return fmt.Errorf("invalid port: %v", port)
+		}
+	default:
+		return fmt.Errorf("unsupported port type: %T", port)
+	}
+	if dockerPort < 1 || dockerPort > 65535 {
+		return fmt.Errorf("invalid port: %v", port)
+	}
+	return nil
 }

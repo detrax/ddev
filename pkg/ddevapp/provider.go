@@ -301,7 +301,7 @@ func (p *Provider) getDownloadDir() string {
 	return destDir
 }
 
-func (p *Provider) doFilesPullCommand() (filename []string, error error) {
+func (p *Provider) doFilesPullCommand() ([]string, error) {
 	destDir := filepath.Join(p.getDownloadDir(), "files")
 	_ = os.RemoveAll(destDir)
 	_ = os.MkdirAll(destDir, 0755)
@@ -324,8 +324,13 @@ func (p *Provider) doFilesPullCommand() (filename []string, error error) {
 
 // getDatabaseBackups retrieves database using `generic backup database`, then
 // describe until it appears, then download it.
-func (p *Provider) getDatabaseBackups() (filename []string, error error) {
+func (p *Provider) getDatabaseBackups() ([]string, error) {
 	err := os.RemoveAll(p.getDownloadDir())
+	if err != nil {
+		return nil, err
+	}
+	// Make sure the deletion is synced before we recreate
+	err = p.app.MutagenSyncFlush()
 	if err != nil {
 		return nil, err
 	}
@@ -355,7 +360,7 @@ func (p *Provider) getDatabaseBackups() (filename []string, error error) {
 		return nil, err
 	}
 
-	sqlTarballs, err := fileutil.ListFilesInDirFullPath(p.getDownloadDir())
+	sqlTarballs, err := fileutil.ListFilesInDirFullPath(p.getDownloadDir(), true)
 	if err != nil || sqlTarballs == nil {
 		return nil, fmt.Errorf("failed to find downloaded files in %s: %v", p.getDownloadDir(), err)
 	}

@@ -49,7 +49,7 @@ jobs:
 
     strategy:
       matrix:
-        os: [ubuntu-22.04]
+        os: [ubuntu-24.04]
         containers: [dbserver, webserver, others]
 
     steps:
@@ -67,7 +67,7 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}
 
       - name: Install Docker and deps (Linux)
-        if: matrix.os == 'ubuntu-22.04'
+        if: matrix.os == 'ubuntu-24.04'
         run: ./.github/workflows/linux-setup.sh
 
       - uses: actions/setup-go@v5
@@ -78,6 +78,7 @@ jobs:
         run: |
           source ~/.bashrc
           docker version
+          docker info
           mkcert --version
           set -eu -o pipefail
 
@@ -94,7 +95,7 @@ jobs:
             popd
 
           elif [[ "${{ matrix.containers }}" == "others" ]]; then
-            for dir in ddev-nginx-proxy-router ddev-ssh-agent ddev-traefik-router test-ssh-server
+            for dir in ddev-gitpod-base ddev-ssh-agent ddev-traefik-router test-ssh-server
               do pushd containers/$dir
               echo "--- Test container $dir"
               time make test DOCKER_ARGS=--no-cache

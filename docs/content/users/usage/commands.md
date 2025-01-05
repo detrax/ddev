@@ -60,6 +60,124 @@ Two flags are available for every command:
 
 ---
 
+## `add-on`
+
+*Aliases: `addon`, `add-ons`, `addons`.*
+
+[Add-on](../extend/additional-services.md) commands.
+
+Environment variables:
+
+* `DDEV_GITHUB_TOKEN`: A [GitHub token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token) may be used for `ddev add-on` requests (which result in GitHub API queries). It's unusual for casual users to need this, but if you're doing lots of `ddev add-on` requests you may run into rate limiting. The token you use requires no privileges at all. Example:
+
+```bash
+export DDEV_GITHUB_TOKEN=<your github token>
+ddev add-on list --all
+```
+
+### `add-on get`
+
+*Alias: `add-on install`.*
+
+Download an add-on (service, provider, etc.).
+
+Flags:
+
+* `--project <projectName>`: Specify a project to install the add-on into. Defaults to checking for a project in the current directory.
+* `--version <version>`: Specify a version to download
+* `--verbose`, `-v`: Output verbose error information with Bash `set -x` (default `false`)
+
+Example:
+
+```shell
+# Download the official Redis add-on
+ddev add-on get ddev/ddev-redis
+
+# Get debug info about `ddev add-on get` failure
+ddev add-on get ddev/ddev-redis --verbose
+
+# Download the official Redis add-on, version v1.0.4
+ddev add-on get ddev/ddev-redis --version v1.0.4
+
+# Download the Drupal Solr add-on from its v1.2.3 release tarball
+ddev add-on get https://github.com/ddev/ddev-drupal-solr/archive/refs/tags/v1.2.3.tar.gz
+
+# Copy an add-on available in another directory
+ddev add-on get /path/to/package
+
+# Copy an add-on from a tarball in another directory
+ddev add-on get /path/to/tarball.tar.gz
+
+# Download the official Redis add-on and install it into a project named "my-project"
+ddev add-on get ddev/ddev-redis --project my-project
+```
+
+In general, you can run `ddev add-on get` multiple times without doing any damage. Updating an add-on can be done by running `ddev add-on get <add-on-name>`. If you have changed an add-on file and removed the `#ddev-generated` marker in the file, that file will not be touched and DDEV will let you know about it.
+
+### `add-on remove`
+
+Remove an installed add-on. Accepts the full add-on name, the short name of the repository, or with owner/repository format.
+
+Flags:
+
+* `--project <projectName>`: Specify a project to remove the add-on from. Defaults to checking for a project in the current directory.
+* `--verbose`, `-v`: Output verbose error information with Bash `set -x` (default `false`)
+
+Example:
+
+```shell
+ddev add-on remove redis
+ddev add-on remove ddev-redis
+ddev add-on remove ddev/ddev-redis
+ddev add-on remove ddev/ddev-redis --project my-project
+```
+
+### `add-on list`
+
+Download an add-on (service, provider, etc.).
+
+Flags:
+
+* `--all`: List unofficial *and* official add-ons. (default `true`)
+* `--installed`: List installed add-ons
+* `--project <projectName>`: Specify the project for which to list add-ons. Can only be used with the `--installed` flag. Defaults to checking for a project in the current directory.
+
+Example:
+
+```shell
+# List official add-ons
+ddev add-on list
+
+# List official and third-party add-ons
+ddev add-on list --all
+
+# List installed add-ons
+ddev add-on list --installed
+
+# List installed add-ons for a specific project
+ddev add-on list --installed --project my-project
+```
+
+## `aliases`
+
+Shows all aliases for each command in the current context (global or project).
+
+```shell
+# Print a list of all available command aliases
+ddev aliases
+```
+
+## `artisan`
+
+*Alias: `art`.*
+
+Run the `artisan` command; available only in projects of type `laravel`, and only available if `artisan` is in the project root.
+
+```shell
+# Show all artisan subcommands
+ddev artisan list
+```
+
 ## `auth`
 
 Authentication commands.
@@ -68,25 +186,23 @@ Authentication commands.
 
 Add [SSH key authentication](../usage/cli.md#ssh-into-containers) to the `ddev-ssh-agent` container.
 
+The command can be executed multiple times to add more keys, or you can use the `-f` flag for several individual keys for example `ddev auth ssh -f /path/to/first_id_rsa -f /path/to/second_id_rsa`.
+
 Example:
 
 ```shell
 # Add your SSH keys to the SSH agent container
 ddev auth ssh
+# Add your SSH keys from ~/custom/path/to/ssh directory
+ddev auth ssh -d ~/custom/path/to/ssh
+# Add your SSH keys from ~/.ssh/id_ed25519 and ~/.ssh/id_rsa files
+ddev auth ssh -f ~/.ssh/id_ed25519 -f ~/.ssh/id_rsa
 ```
 
 Flags:
 
-* `--ssh-key-path`, `-d`: Full path to SSH key directory.
-
-## `artisan`
-
-Run the `artisan` command; available only in projects of type `laravel`, and only available if `artisan` is in the project root.
-
-```shell
-# Show all artisan subcommands
-ddev artisan list
-```
+* `--ssh-key-file`, `-f`: Path to SSH private key file, use the flag multiple times to add more keys.
+* `--ssh-key-path`, `-d`: Path to directory with SSH private key(s), use the flag multiple times to add more directories.
 
 ## `blackfire`
 
@@ -142,6 +258,8 @@ ddev clean my-project my-other-project
 
 ## `composer`
 
+*Alias: `co`.*
+
 Executes a [Composer command](../usage/developer-tools.md#ddev-and-composer) within the web container.
 
 `ddev composer create` is a special command that is an adaptation of `composer create-project`. See [DDEV and Composer](../usage/developer-tools.md#ddev-and-composer) for more information.
@@ -195,7 +313,7 @@ Flags:
 * `--bind-all-interfaces`: Bind host ports on all interfaces, not only on localhost network interface.
 * `--composer-root`: Overrides the default Composer root directory for the web service.
 * `--composer-root-default`: Unsets a web service Composer root directory override.
-* `--composer-version`: Specify override for Composer version in the web container. This may be `""`, `"1"`, `"2"`, `"2.2"`, `"stable"`, `"preview"`, `"snapshot"`, or a specific version.
+* `--composer-version`: Specify override for Composer version in the web container. This may be `""`, `"1"`, `"2"`, `"2.2"`, `"stable"`, `"preview"`, `"snapshot"`, or a specific version. (Note that if your project composer build requires `composer/composer` then the version you require there will be used instead of the version specified here.)
 * `--database`: Specify the database type:version to use. Defaults to `mariadb:10.11`.
 * `--db-image`: Sets the db container image.
 * `--db-image-default`: Sets the default db container image for this DDEV version.
@@ -224,7 +342,7 @@ Flags:
 * `--php-version`: PHP version that will be enabled in the web container.
 * `--project-name`: Provide the project name of project to configure. (normally the same as the last part of directory name)
 * `--project-tld`: Set the top-level domain to be used for projects. (default `"ddev.site"`)
-* `--project-type`: Provide the project type: `backdrop`, `drupal`, `drupal6`, `drupal7`, `laravel`, `magento`, `magento2`, `php`, `shopware6`, `silverstripe`, `typo3`, `wordpress`. This is autodetected and this flag is necessary only to override the detection.
+* `--project-type`: Provide [the project type](../configuration/config.md#type) of project to configure. This is autodetected and this flag is necessary only to override the detection.
 * `--show-config-location`: Output the location of the `config.yaml` file if it exists, or error that it doesn’t exist.
 * `--timezone`: Specify timezone for containers and PHP, like `Europe/London` or `America/Denver` or `GMT` or `UTC`.
 * `--update`: Automatically detect and update settings by inspecting the code.
@@ -237,7 +355,7 @@ Flags:
 * `--web-working-dir`: Overrides the default working directory for the web service.
 * `--web-working-dir-default`: Unsets a web service working directory override.
 * `--webimage-extra-packages`: A comma-delimited list of Debian packages that should be added to web container when the project is started or `--webimage-extra-packages=""` to remove any previously configured packages.
-* `--webserver-type`: Sets the project’s desired web server type: `nginx-fpm`, `nginx-gunicorn`, or `apache-fpm`.
+* `--webserver-type`: Sets the project’s desired web server type: `nginx-fpm` or `apache-fpm`.
 * `--working-dir-defaults`: Unsets all service working directory overrides.
 * `--xdebug-enabled`: Whether or not Xdebug is enabled in the web container.
 
@@ -253,7 +371,6 @@ ddev config global --instrumentation-opt-in=false
 ddev config global --omit-containers=ddev-ssh-agent
 ```
 
-* `--disable-http2`: Optionally disable http2 in `ddev-router`; `ddev config global --disable-http2` or `ddev config global --disable-http2=false`. This option is not available in the current Traefik-based `ddev-router`, but only in the deprecated `nginx-proxy` router.
 * `--fail-on-hook-fail`: If true, `ddev start` will fail when a hook fails.
 * `--instrumentation-opt-in`: `instrumentation-opt-in=true`.
 * `--internet-detection-timeout-ms`: Increase timeout when checking internet timeout, in milliseconds. (default `3000`)
@@ -274,6 +391,15 @@ ddev config global --omit-containers=ddev-ssh-agent
 * `--use-letsencrypt`: Enables experimental Let’s Encrypt integration; `ddev global --use-letsencrypt` or `ddev global --use-letsencrypt=false`.
 * `--web-environment`: Set the environment variables in the web container: `--web-environment="TYPO3_CONTEXT=Development,SOMEENV=someval"`
 * `--web-environment-add`: Append environment variables to the web container: `--web-environment="TYPO3_CONTEXT=Development,SOMEENV=someval"`
+
+## `console`
+
+Run the `console` command; available only in projects of type `symfony`, and only available if `bin/console` exists.
+
+```shell
+# Show all Symfony console subcommands
+ddev console list
+```
 
 ## `craft`
 
@@ -315,6 +441,19 @@ ddev debug capabilities
 
 # List capabilities of `my-project`
 ddev debug capabilities my-project
+```
+
+### `debug cd`
+
+Uses shell built-in `cd` to change to a project directory. For example, `ddevcd some-project` will change directories to the project root of the project named `some-project`.
+
+Note that this command can't work until you make a small addition to your `.bashrc`, `.zshrc`, or `config.fish`.
+
+```shell
+# To see the explanation of what you need to do
+ddev debug cd
+# Where some-project is a project from the `ddev list`
+ddevcd some-project
 ```
 
 ### `debug check-db-match`
@@ -400,6 +539,26 @@ Example:
 ddev debug get-volume-db-version
 ```
 
+### `debug match-constraint`
+
+Check if the currently installed ddev matches the specified [version constraint](https://github.com/Masterminds/semver#checking-version-constraints).
+
+Example:
+
+```shell
+# This is only supported with DDEV versions above v1.24.0
+if ddev debug match-constraint "< 1.25" >/dev/null 2>&1; then
+  # do something for ddev versions below 1.25
+  ...
+else
+  # do something for ddev versions 1.25+
+  ...
+fi
+```
+
+!!!tip
+    You can also configure a [ddev version constraint per project](../configuration/config.md#ddev_version_constraint).
+
 ### `debug migrate-database`
 
 Migrate a MySQL or MariaDB database to a different `dbtype:dbversion`. Works only with MySQL and MariaDB, not with PostgreSQL. It will export your database, create a snapshot, destroy your current database, and import into the new database type. It only migrates the 'db' database. It will update the database version in your project's `config.yaml` file.
@@ -433,26 +592,32 @@ Example:
 ddev debug nfsmount
 ```
 
-### `debug refresh`
+### `debug rebuild`
 
-Refreshes the project’s Docker cache.
+*Alias: `debug refresh`.*
 
-Example:
+Rebuilds the project’s Docker cache with verbose output.
 
-```shell
-# Refresh the current project’s Docker cache
-ddev debug refresh
-```
+Flags:
 
-### `debug router-nginx-config`
-
-Prints the router’s [nginx config](../extend/customization-extendibility.md#custom-nginx-configuration).
+* `--all`, `-a`: Rebuild all services.
+* `--cache`: Keep Docker cache.
+* `--service`, `-s`: Rebuild specified service. (default `web`)
 
 Example:
 
 ```shell
-# Output router nginx configuration
-ddev debug router-nginx-config
+# Rebuild the current project’s web service without cache
+ddev debug rebuild
+
+# Rebuild the current project’s web service with cache
+ddev debug rebuild --cache
+
+# Rebuild the current project’s db service without cache
+ddev debug rebuild --service db
+
+# Rebuild the current project’s all services without cache
+ddev debug rebuild --all
 ```
 
 ### `debug test`
@@ -536,7 +701,50 @@ ddev describe
 ddev describe my-project
 ```
 
+## `dotenv`
+
+Commands for managing the contents of `.env` files.
+
+### `dotenv get`
+
+Get the value of an environment variable from a .env file. Provide the path relative to the project root when specifying the file.
+
+Example:
+
+```shell
+# Get the value of APP_KEY from the $DDEV_APPROOT/.env file
+ddev dotenv get .env --app-key
+
+# Get the value of ENV_KEY from the $DDEV_APPROOT/.ddev/.env file
+ddev dotenv get .ddev/.env --env-key
+```
+
+### `dotenv set`
+
+*Alias: `dotenv add`.*
+
+Create or update a `.env` file with values specified via long flags from the command line.
+Flags in the format `--env-key=value` will be converted to environment variable names
+like `ENV_KEY="value"`. The .env file should be named `.env` or `.env.<servicename>` or `.env.<something>`
+All environment variables can be used and expanded in `.ddev/docker-compose.*.yaml` files.
+Provide the path relative to the project root when specifying the file.
+
+Example:
+
+```shell
+# Create or update $DDEV_APPROOT/.env file with APP_KEY="value"
+ddev dotenv set .env --app-key=value
+
+# Create or update $DDEV_APPROOT/.ddev/.env file with EXTRA="value" and ANOTHER_KEY="extra value"
+ddev dotenv set .ddev/.env --extra value --another-key "extra value"
+
+# Create or update $DDEV_APPROOT/.ddev/.env.redis file with REDIS_TAG="7-bookworm"
+ddev dotenv set .ddev/.env.redis --redis-tag 7-bookworm
+```
+
 ## `drush`
+
+*Alias: `dr`.*
 
 Run the `drush` command; available only in projects of type `drupal*`, and only available if `drush` is in the project. On projects of type `drupal`, `drush` should be installed in the project itself, (`ddev composer require drush/drush`). On projects of type `drupal7` `drush` 8 is provided by DDEV.
 
@@ -602,67 +810,6 @@ ddev export-db > /tmp/db.sql.gz
 # Dump my-project’s database, without compressing it, to `/tmp/my-project.sql`
 ddev export-db my-project --gzip=false --file=/tmp/my-project.sql
 ```
-
-## `get`
-
-Download an [add-on](../extend/additional-services.md) (service, provider, etc.).
-
-Flags:
-
-* `--all`: List unofficial *and* official add-ons. (default `true`)
-* `--list`: List official add-ons. (default `true`)
-* `--installed`: List installed add-ons
-* `--remove <add-on>`: Remove an installed add-on
-* `--version <version>`: Specify a version to download
-* `--verbose`, `-v`: Output verbose error information with Bash `set -x` (default `false`)
-
-Environment variables:
-
-* `DDEV_GITHUB_TOKEN`: A [GitHub token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token) may be used for `ddev get` requests (which result in GitHub API queries). It's unusual for casual users to need this, but if you're doing lots of `ddev get` requests you may run into rate limiting. The token you use requires no privileges at all. Example:
-
-```bash
-export DDEV_GITHUB_TOKEN=<your github token>
-ddev get --list --all
-```
-
-Example:
-
-```shell
-# List official add-ons
-ddev get --list
-
-# List official and third-party add-ons
-ddev get --list --all
-
-# Download the official Redis add-on
-ddev get ddev/ddev-redis
-
-# Get debug info about `ddev get` failure
-ddev get ddev/ddev-redis --verbose
-
-# Download the official Redis add-on, version v1.0.4
-ddev get ddev/ddev-redis --version v1.0.4
-
-# Download the Drupal Solr add-on from its v1.2.3 release tarball
-ddev get https://github.com/ddev/ddev-drupal-solr/archive/refs/tags/v1.2.3.tar.gz
-
-# Copy an add-on available in another directory
-ddev get /path/to/package
-
-# Copy an add-on from a tarball in another directory
-ddev get /path/to/tarball.tar.gz
-
-# View installed add-ons
-ddev get --installed
-
-# Remove an add-on can be done with the full name, the short name of repo
-# or with owner/repo format
-ddev get --remove redis
-ddev get --remove ddev-redis
-ddev get --remove ddev/ddev-redis
-```
-
-In general, you can run `ddev get` multiple times without doing any damage. Updating an add-on can be done by running `ddev get <add-on-name>`. If you have changed an add-on file and removed the `#ddev-generated` marker in the file, that file will not be touched and DDEV will let you know about it.
 
 ## `heidisql`
 
@@ -852,6 +999,15 @@ ddev logs -s db
 ddev logs -s db my-project
 ```
 
+## `magento`
+
+Run the `magento` command; available only in projects of type `magento2`, and only works if `bin/magento` is in the project.
+
+```shell
+# Show all magento subcommands
+ddev magento list
+```
+
 ## `mailpit`
 
 Launch a browser with mailpit for the current project (global shell host container command).
@@ -863,13 +1019,21 @@ Example:
 ddev mailpit
 ```
 
-## `magento`
+## `mariadb`
 
-Run the `magento` command; available only in projects of type `magento2`, and only works if `bin/magento` is in the project.
+Run MariaDB client in the database container (global shell db container command). This is only available on projects that use the `mariadb` database type. (This is the same as the `mysql` command, but MariaDB is changing the name of their CLI client.)
+
+Example:
 
 ```shell
-# Show all magento subcommands
-ddev magento list
+# Run the database container’s MariaDB client as root user
+ddev mariadb
+
+# Run the database container’s MariaDB client as db user
+ddev mariadb -udb -pdb
+
+# Pipe the `SHOW TABLES;` command to the MariaDB client to see a list of tables
+echo 'SHOW TABLES;' | ddev mariadb
 ```
 
 ## `mutagen`
@@ -918,6 +1082,8 @@ ddev mutagen reset my-project
 ```
 
 ### `mutagen status`
+
+*Alias: `mutagen st`.*
 
 Shows Mutagen sync status.
 
@@ -971,11 +1137,11 @@ Run MySQL client in the database container (global shell db container command). 
 Example:
 
 ```shell
-# Run the database container’s MySQL client
+# Run the database container’s MySQL client as root user
 ddev mysql
 
-# Run the database container’s MySQL client as root user
-ddev mysql -uroot -proot
+# Run the database container’s MySQL client as db user
+ddev mysql -udb -pdb
 
 # Pipe the `SHOW TABLES;` command to the MySQL client to see a list of tables
 echo 'SHOW TABLES;' | ddev mysql
@@ -1123,19 +1289,6 @@ ddev push platform --skip-files -y
 ddev push acquia --skip-db -y
 ```
 
-## `python`
-
-Runs `python` inside the web container in the same relative directory you're in on the host.
-
-`ddev python` is only available on Python-based project types like Django and Python.
-
-Example:
-
-```shell
-# Run manage.py
-ddev python manage.py migrate
-```
-
 ## `querious`
 
 Open [Querious](https://www.araelium.com/querious) with the current project’s MariaDB or MySQL database (global shell host container command). This is only available if `Querious.app` is installed as `/Applications/Querious.app`, and only for projects with `mysql` or `mariadb` databases.
@@ -1170,13 +1323,13 @@ ddev restart --all
 
 ## `sake`
 
-Run the `sake` command, only available for Silverstripe projects and if the Silverstripe `sake` command is
+Run the `sake` command, only available for Silverstripe CMS projects and if the `sake` command is
 available in the `vendor/bin` folder.
 
 Common commands:
 
-* Build database: `ddev sake dev/build`
-* List of available tasks: `ddev sake dev/tasks`
+* Build database: `ddev sake dev/build` (or `ddev sake db:build` from Silverstripe CMS 6 onwards)
+* List of available tasks: `ddev sake dev/tasks` (or `ddev sake tasks` from Silverstripe CMS 6 onwards)
 
 ## `self-upgrade`
 
@@ -1351,6 +1504,8 @@ ddev ssh -d /var/www/html
 ```
 
 ## `start`
+
+*Alias: `add`*.
 
 Start a DDEV project.
 

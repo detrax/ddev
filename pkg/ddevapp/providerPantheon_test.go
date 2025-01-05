@@ -135,7 +135,6 @@ func TestPantheonPush(t *testing.T) {
 	if sshkey = os.Getenv("DDEV_PANTHEON_SSH_KEY"); sshkey == "" {
 		t.Skipf("No DDEV_PANTHEON_SSH_KEY env var has been set. Skipping %v", t.Name())
 	}
-	sshkey = strings.Replace(sshkey, "<SPLIT>", "\n", -1)
 
 	// Set up tests and give ourselves a working directory.
 	assert := asrt.New(t)
@@ -146,18 +145,18 @@ func TestPantheonPush(t *testing.T) {
 	err := globalconfig.WriteGlobalConfig(globalconfig.DdevGlobalConfig)
 	assert.NoError(err)
 
-	// Use a D10 codebase for Drush to work right
-	d9code := FullTestSites[12]
-	d9code.Name = t.Name()
+	// Use a D11 codebase for Drush to work right
+	d11code := FullTestSites[16]
+	d11code.Name = t.Name()
 	err = globalconfig.RemoveProjectInfo(t.Name())
 	require.NoError(t, err)
-	err = d9code.Prepare()
+	err = d11code.Prepare()
 	require.NoError(t, err)
-	app, err := ddevapp.NewApp(d9code.Dir, false)
+	app, err := ddevapp.NewApp(d11code.Dir, false)
 	require.NoError(t, err)
 	_ = app.Stop(true, false)
 
-	err = os.Chdir(d9code.Dir)
+	err = os.Chdir(d11code.Dir)
 	require.NoError(t, err)
 
 	err = setupSSHKey(t, sshkey, filepath.Join(origDir, "testdata", t.Name()))
@@ -172,11 +171,11 @@ func TestPantheonPush(t *testing.T) {
 		assert.NoError(err)
 
 		_ = os.Chdir(origDir)
+		_ = os.RemoveAll(app.AppRoot)
 	})
 
 	app.Name = t.Name()
-	app.Type = nodeps.AppTypeDrupal
-	app.PHPVersion = nodeps.PHP82
+	app.Type = nodeps.AppTypeDrupal11
 	app.Hooks = map[string][]ddevapp.YAMLTask{"post-push": {{"exec-host": "touch hello-post-push-" + app.Name}}, "pre-push": {{"exec-host": "touch hello-pre-push-" + app.Name}}}
 	_ = app.Stop(true, false)
 
@@ -269,10 +268,23 @@ func setupSSHKey(t *testing.T, privateKey string, expectScriptDir string) error 
 	// Provide an SSH key for `ddev auth ssh`
 	err := os.Mkdir("sshtest", 0755)
 	require.NoError(t, err)
+	// If the first line is empty, discard it
+	if privateKey[0] == '\n' {
+		privateKey = privateKey[1:]
+	}
+	if privateKey[len(privateKey)-1] != '\n' {
+		privateKey = privateKey + "\n"
+	}
+	//l := len(privateKey)
+	//t.Logf("privateKey starts with character '%v' string '%s' keytype '%s' and ends with '%s'. The last character is '%v'", privateKey[0], privateKey[0:30], privateKey[5:40], privateKey[l-26:], privateKey[l-1])
 	err = os.WriteFile(filepath.Join("sshtest", "id_rsa_test"), []byte(privateKey), 0600)
 	require.NoError(t, err)
+	//out, err2 := exec.RunHostCommand("file", filepath.Join("sshtest", "id_rsa_test"))
+	//require.NoError(t, err2)
+	//t.Logf("result of file on id_rsa_test=%s", out)
 	out, err := exec.RunHostCommand("expect", filepath.Join(expectScriptDir, "ddevauthssh.expect"), DdevBin, "./sshtest")
-	require.NoError(t, err, "out=%s", out)
+	pwd, _ := os.Getwd()
+	require.NoError(t, err, "failed to RunHostCommand expect script in dir=%s, out=%s", pwd, out)
 	require.Contains(t, out, "Identity added:")
 	return nil
 }

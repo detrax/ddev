@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Copyright (c) Andreas Urbanski, 2018
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
@@ -32,8 +32,8 @@ debug_msg ()
   fi
 }
 
-mkdir -p $SSH_KEY_DIR && ( chmod 700 $SSH_KEY_DIR || true )
-mkdir -p $SOCKET_DIR
+mkdir -p ${SSH_KEY_DIR} && ( chmod 700 ${SSH_KEY_DIR} || true )
+mkdir -p ${SOCKET_DIR}
 
 case "$1" in
   # Start ssh-agent

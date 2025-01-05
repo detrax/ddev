@@ -3,9 +3,8 @@
 ### Build ddev-php-base from ddev-webserver-base
 ### ddev-php-base is the basic of ddev-php-prod
 ### and ddev-webserver-* (For DDEV local Usage)
-FROM ddev/ddev-php-base:20240723_stasadev_n_install_auto as ddev-webserver-base
-
-ENV BACKDROP_DRUSH_VERSION=1.4.0
+FROM ddev/ddev-php-base:v1.24.1 AS ddev-webserver-base
+SHELL ["/bin/bash", "-eu","-o", "pipefail", "-c"]
 ENV DEBIAN_FRONTEND=noninteractive
 
 ENV NGINX_SITE_TEMPLATE=/etc/nginx/nginx-site.conf
@@ -16,7 +15,9 @@ ENV CAROOT=/mnt/ddev-global-cache/mkcert
 # TARGETPLATFORM is Docker buildx's target platform (e.g. linux/arm64), while
 # BUILDPLATFORM is the platform of the build host (e.g. linux/amd64)
 ARG TARGETPLATFORM
+ARG TARGETARCH
 ARG BUILDPLATFORM
+ARG DEFAULT_LOCALES="en_CA.UTF-8 UTF-8\nen_US.UTF-8 UTF-8\nen_GB.UTF-8 UTF-8\nes_ES.UTF-8 UTF-8\nes_MX.UTF-8 UTF-8\nde_DE.UTF-8 UTF-8\nde_AT.UTF-8 UTF-8\nfr_CA.UTF-8 UTF-8\nfr_FR.UTF-8 UTF-8\nja_JP.UTF-8 UTF-8\npt_PT.UTF-8 UTF-8\npt_BR.UTF-8 UTF-8\nru_RU.UTF-8 UTF-8\n"
 
 ADD ddev-webserver-etc-skel /
 RUN /sbin/mkhomedir_helper www-data
@@ -32,18 +33,34 @@ RUN mariadb_repo_setup --mariadb-server-version="mariadb-10.11" --skip-maxscale 
 # Set up Postgresql apt repository
 RUN install -d /usr/share/postgresql-common/pgdg && curl -s -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc
 
-RUN apt-get install -y postgresql-common && yes | /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
+RUN apt-get install -y postgresql-common && /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
 
 RUN apt-get -qq update
 RUN DEBIAN_FRONTEND=noninteractive apt-get -qq install -y -o Dpkg::Options::="--force-confold" --no-install-recommends --no-install-suggests -y \
+    bash-completion \
+    gettext \
+    graphviz \
+    less \
     libcap2-bin \
-    locales-all \
+    libldap-common \
+    libmagickcore-6.q16-6-extra \
+    locales \
     mariadb-client \
     postgresql-client \
     pv \
+    python-is-python3 \
+    rsync \
+    sqlite3 \
     supervisor \
     symfony-cli \
-    xz-utils
+    unzip \
+    vim-tiny \
+    xz-utils \
+    zip
+
+RUN update-alternatives --install /usr/bin/vim vim /usr/bin/vim.tiny 10
+
+RUN printf "${DEFAULT_LOCALES}" > /etc/locale.gen && locale-gen
 
 # Arbitrary user needs to be able to bind to privileged ports (for nginx and apache2)
 RUN setcap CAP_NET_BIND_SERVICE=+eip /usr/sbin/nginx
@@ -70,51 +87,46 @@ RUN if [ "$(dpkg --print-architecture)" = "amd64" ]; then cd /tmp && curl -L -s 
 RUN set -x && cd /tmp && for item in *.deb; do dpkg-deb -x ${item} extracted; done
 RUN mkdir -p /usr/local/mariadb-old/bin && cp -ap /tmp/extracted/usr/bin/{mariadb,mariadb-dump,mysql,mysqldump} /usr/local/mariadb-old/bin
 
+### Drupal 11+ requires a minimum sqlite3 version (3.45 currently)
+### TODO: When we have this from upstream Debian 13 Trixie, we must remove this stanza
+ARG SQLITE_VERSION="3.45.1"
+RUN mkdir -p /usr/local/sqlite3-drupal11 && cd /usr/local/sqlite3-drupal11 && \
+    wget https://snapshot.debian.org/archive/debian/20240203T152533Z/pool/main/s/sqlite3/sqlite3_${SQLITE_VERSION}-1_${TARGETARCH}.deb && \
+    wget https://snapshot.debian.org/archive/debian/20240203T152533Z/pool/main/s/sqlite3/libsqlite3-0_${SQLITE_VERSION}-1_${TARGETARCH}.deb
+
 # END ddev-webserver-base
 
 
 ### ---------------------------ddev-webserver-dev-base--------------------------------------
 ### Build ddev-webserver-dev-base from ddev-webserver-base
-FROM ddev-webserver-base as ddev-webserver-dev-base
+FROM ddev-webserver-base AS ddev-webserver-dev-base
+SHELL ["/bin/bash", "-eu", "-o", "pipefail", "-c"]
+
 ENV CAROOT=/mnt/ddev-global-cache/mkcert
-ENV PHP_DEFAULT_VERSION="8.2"
+ENV PHP_DEFAULT_VERSION="8.3"
 
 RUN curl -s --fail https://packages.blackfire.io/gpg.key > /usr/share/keyrings/blackfire-archive-keyring.asc
 RUN echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/blackfire-archive-keyring.asc] http://packages.blackfire.io/debian any main" > /etc/apt/sources.list.d/blackfire.list
 RUN apt-get update
 
-SHELL ["/bin/bash", "-c"]
 
 RUN DEBIAN_FRONTEND=noninteractive apt-get -qq install -o Dpkg::Options::="--force-confold" --no-install-recommends --no-install-suggests -y \
     blackfire \
     blackfire-php \
     fontconfig \
-    gettext \
     git \
-    graphviz \
     iproute2 \
     iputils-ping \
     jq \
-    libldap-common \
     libpcre3 \
-    libpq-dev \
-    libpython3-dev \
-    locales-all \
     nano \
     ncurses-bin \
     netcat-traditional \
     openssh-client \
     patch \
-    python-is-python3 \
-    python3-pip \
-    python3-psycopg2 \
-    python3-venv \
-    rsync \
-    sqlite3 \
     sudo \
     telnet \
-    unzip \
-    zip
+    tree
 
 # Remove blackfire from apt sources, because we pin to a specific version, see https://github.com/ddev/ddev/issues/6078
 RUN rm /etc/apt/sources.list.d/blackfire.list
@@ -129,7 +141,7 @@ ADD ddev-webserver-dev-base-files /
 RUN phpdismod blackfire xdebug
 RUN phpdismod xhprof
 
-RUN set -x && set -o pipefail && tag=$(curl -L --fail --silent "https://api.github.com/repos/axllent/mailpit/releases/latest" | jq -r .tag_name) && curl --fail -sSL "https://github.com/axllent/mailpit/releases/download/${tag}/mailpit-linux-${TARGETPLATFORM##linux/}.tar.gz" -o /tmp/mailpit.tar.gz && tar -zx -C /usr/local/bin -f /tmp/mailpit.tar.gz mailpit && rm /tmp/mailpit.tar.gz
+RUN set -x && set -o pipefail && tag=$(curl -L --fail --silent "https://api.github.com/repos/axllent/mailpit/releases/latest" | jq -r .tag_name) && curl --fail -sSL "https://github.com/axllent/mailpit/releases/download/${tag}/mailpit-linux-${TARGETARCH}.tar.gz" -o /tmp/mailpit.tar.gz && tar -zx -C /usr/local/bin -f /tmp/mailpit.tar.gz mailpit && rm /tmp/mailpit.tar.gz
 
 RUN curl -sSL --fail --output /usr/local/bin/phive "https://phar.io/releases/phive.phar" && chmod 777 /usr/local/bin/phive
 # Install terminus cli
@@ -139,16 +151,16 @@ RUN set -o pipefail && curl -fsSL https://raw.githubusercontent.com/platformsh/c
 # Install upsun cli
 RUN set -o pipefail && curl -fsSL https://raw.githubusercontent.com/platformsh/cli/main/installer.sh | VENDOR=upsun bash
 # Install lagoon cli
-RUN set -o pipefail && tag=$(curl -L --fail --silent "https://api.github.com/repos/uselagoon/lagoon-cli/releases/latest" | jq -r .tag_name) && curl --fail -sSL "https://github.com/uselagoon/lagoon-cli/releases/download/$tag/lagoon-cli-$tag-linux-${TARGETPLATFORM##linux/}" --output /usr/local/bin/lagoon && chmod 777 /usr/local/bin/lagoon
+RUN set -o pipefail && tag=$(curl -L --fail --silent "https://api.github.com/repos/uselagoon/lagoon-cli/releases/latest" | jq -r .tag_name) && curl --fail -sSL "https://github.com/uselagoon/lagoon-cli/releases/download/$tag/lagoon-cli-$tag-linux-${TARGETARCH}" --output /usr/local/bin/lagoon && chmod 777 /usr/local/bin/lagoon
 # Install lagoon-sync
-RUN set -x && set -o pipefail && tag=$(curl -L --fail --silent "https://api.github.com/repos/uselagoon/lagoon-sync/releases/latest" | jq -r .tag_name) && curl --fail -sSL "https://github.com/uselagoon/lagoon-sync/releases/download/${tag}/lagoon-sync_${tag:1}_linux_${TARGETPLATFORM##linux/}" --output /usr/local/bin/lagoon-sync && chmod 777 /usr/local/bin/lagoon-sync
+RUN set -x && set -o pipefail && tag=$(curl -L --fail --silent "https://api.github.com/repos/uselagoon/lagoon-sync/releases/latest" | jq -r .tag_name) && curl --fail -sSL "https://github.com/uselagoon/lagoon-sync/releases/download/${tag}/lagoon-sync_${tag:1}_linux_${TARGETARCH}" --output /usr/local/bin/lagoon-sync && chmod 777 /usr/local/bin/lagoon-sync
 
 RUN mkdir -p "/opt/phpstorm-coverage" && \
     chmod a+rw "/opt/phpstorm-coverage"
 
 RUN curl --fail -sSL --output /usr/local/bin/acli https://github.com/acquia/cli/releases/latest/download/acli.phar && chmod 777 /usr/local/bin/acli
 
-RUN curl --fail -sSL https://github.com/backdrop-contrib/drush/releases/download/${BACKDROP_DRUSH_VERSION}/backdrop-drush-extension.zip -o /tmp/backdrop-drush-extension.zip && unzip -o /tmp/backdrop-drush-extension.zip -d /var/tmp/backdrop_drush_commands && chmod -R ugo+w /var/tmp/backdrop_drush_commands && rm /tmp/backdrop-drush-extension.zip
+RUN set -o pipefail && tag=$(curl -L --fail --silent "https://api.github.com/repos/backdrop-contrib/drush/releases/latest" | jq -r .tag_name) && curl --fail -sSL "https://github.com/backdrop-contrib/drush/releases/download/${tag}/backdrop-drush-extension.zip" -o /tmp/backdrop-drush-extension.zip && unzip -o /tmp/backdrop-drush-extension.zip -d /var/tmp/backdrop_drush_commands && chmod -R ugo+w /var/tmp/backdrop_drush_commands && rm /tmp/backdrop-drush-extension.zip
 
 RUN mkdir -p /etc/nginx/sites-enabled /var/log/apache2 /var/run/apache2 /var/lib/apache2/module/enabled_by_admin /var/lib/apache2/module/disabled_by_admin && \
     touch /var/log/php-fpm.log && \
@@ -195,8 +207,8 @@ RUN update-alternatives --set php /usr/bin/php${PHP_DEFAULT_VERSION}
 ### This could be known as ddev-webserver-dev as it's development-env targeted
 ### But for historical reasons, it's just ddev-webserver
 ### Build ddev-webserver by turning ddev-webserver-dev-base into one layer
-FROM scratch as ddev-webserver
-ENV PHP_DEFAULT_VERSION="8.2"
+FROM scratch AS ddev-webserver
+ENV PHP_DEFAULT_VERSION="8.3"
 ENV NGINX_SITE_TEMPLATE=/etc/nginx/nginx-site.conf
 ENV APACHE_SITE_TEMPLATE=/etc/apache2/apache-site.conf
 ENV TERMINUS_CACHE_DIR=/mnt/ddev-global-cache/terminus/cache
@@ -222,36 +234,21 @@ CMD ["/start.sh"]
 ### ---------------------------ddev-webserver-prod-base--------------------------------------
 ### Build ddev-webserver-prod-base from ddev-webserver-base
 ### This image is aimed at actual hardened production environments
-FROM ddev-webserver-base as ddev-webserver-prod-base
+FROM ddev-webserver-base AS ddev-webserver-prod-base
+SHELL ["/bin/bash", "-eu", "-o", "pipefail", "-c"]
+
 ENV CAROOT=/mnt/ddev-global-cache/mkcert
-ENV PHP_DEFAULT_VERSION="8.2"
+ENV PHP_DEFAULT_VERSION="8.3"
 ARG TARGETPLATFORM
+ARG TARGETARCH
 
 RUN curl -s --fail https://packages.blackfire.io/gpg.key > /usr/share/keyrings/blackfire-archive-keyring.asc
 RUN echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/blackfire-archive-keyring.asc] http://packages.blackfire.io/debian any main" > /etc/apt/sources.list.d/blackfire.list
 RUN apt-get update
 
-SHELL ["/bin/bash", "-c"]
 
 RUN DEBIAN_FRONTEND=noninteractive apt-get -qq install -o Dpkg::Options::="--force-confold" --no-install-recommends --no-install-suggests -y \
-    blackfire-php \
-    fontconfig \
-    gettext \
-    git \
-    iproute2 \
-    iputils-ping \
-    jq \
-    libpcre3 \
-    locales-all \
-    nano \
-    ncurses-bin \
-    netcat-traditional \
-    openssh-client \
-    patch \
-    rsync \
-    sqlite3 \
-    unzip \
-    zip
+    blackfire-php
 
 # Remove blackfire from apt sources, because we pin to a specific version, see https://github.com/ddev/ddev/issues/6078
 RUN rm /etc/apt/sources.list.d/blackfire.list
@@ -262,7 +259,7 @@ ADD ddev-webserver-prod-files /
 RUN phpdismod blackfire
 RUN phpdismod xhprof
 
-RUN curl --fail -sSL https://github.com/backdrop-contrib/drush/releases/download/${BACKDROP_DRUSH_VERSION}/backdrop-drush-extension.zip -o /tmp/backdrop-drush-extension.zip && unzip -o /tmp/backdrop-drush-extension.zip -d /var/tmp/backdrop_drush_commands && chmod -R ugo+w /var/tmp/backdrop_drush_commands && rm /tmp/backdrop-drush-extension.zip
+RUN set -o pipefail && tag=$(curl -L --fail --silent "https://api.github.com/repos/backdrop-contrib/drush/releases/latest" | jq -r .tag_name) && curl --fail -sSL "https://github.com/backdrop-contrib/drush/releases/download/${tag}/backdrop-drush-extension.zip" -o /tmp/backdrop-drush-extension.zip && unzip -o /tmp/backdrop-drush-extension.zip -d /var/tmp/backdrop_drush_commands && chmod -R ugo+w /var/tmp/backdrop_drush_commands && rm /tmp/backdrop-drush-extension.zip
 
 RUN mkdir -p /etc/nginx/sites-enabled /var/lock/apache2 /var/log/apache2 /var/run/apache2 /var/lib/apache2/module/enabled_by_admin /var/lib/apache2/module/disabled_by_admin && \
     touch /var/log/php-fpm.log && \
@@ -305,8 +302,8 @@ RUN update-alternatives --set php /usr/bin/php${PHP_DEFAULT_VERSION}
 ### ---------------------------ddev-webserver-prod--------------------------------------
 ### Build ddev-webserver-prod, the hardened version of ddev-webserver-base
 ### (Withut dev features, single layer)
-FROM scratch as ddev-webserver-prod
-ENV PHP_DEFAULT_VERSION="8.2"
+FROM scratch AS ddev-webserver-prod
+ENV PHP_DEFAULT_VERSION="8.3"
 ENV NGINX_SITE_TEMPLATE=/etc/nginx/nginx-site.conf
 ENV APACHE_SITE_TEMPLATE=/etc/apache2/apache-site.conf
 ENV TERMINUS_CACHE_DIR=/mnt/ddev-global-cache/terminus/cache

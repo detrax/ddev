@@ -9,7 +9,14 @@ search:
 There are several ways to use DDEV’s latest-committed HEAD version:
 
 * **Download** the latest master branch artifacts from [nightly.link](https://nightly.link/ddev/ddev/workflows/master-build/master). Each of these is built by the CI system, signed, and notarized. Get the one you need and place it in your `$PATH`.
-* **Homebrew install HEAD**: On macOS and Linux, run `brew unlink ddev && brew install ddev/ddev/ddev --HEAD --fetch-HEAD` to get the latest DDEV commit, even if it’s unreleased. Since you’re building this on your own computer, it’s not signed or notarized, and you’ll get a notification that instrumentation doesn’t work, which is fine. If you’re using Linux/WSL2, you’ll likely need to install build-essential by running the following command: `sudo apt-get install -y build-essential`.
+* **Homebrew install HEAD**: On macOS and Linux, run `brew unlink ddev && brew install ddev/ddev/ddev --HEAD --fetch-HEAD` to get the latest DDEV commit, even if it’s unreleased.
+* **Install via script**: You can download and run the [install_ddev_head.sh](https://raw.githubusercontent.com/ddev/ddev/refs/heads/master/scripts/install_ddev_head.sh)  script, or run it automatically:
+
+    ```bash
+    # Download and run the install script
+    curl -fsSL https://raw.githubusercontent.com/ddev/ddev/refs/heads/master/scripts/install_ddev_head.sh | bash
+    ```
+
 * **Build manually**: If you have normal build tools like `make` and `go` installed, you can check out the code and run `make`.
 * **Gitpod** You can use the latest build by visiting DDEV on [Gitpod](https://gitpod.io/#https://github.com/ddev/ddev).
 
@@ -17,66 +24,47 @@ There are several ways to use DDEV’s latest-committed HEAD version:
 
 Each [PR build](https://github.com/ddev/ddev/actions/workflows/pr-build.yml) creates GitHub artifacts you can use for testing, so you can download the one you need from the PR page, install it locally, and test using that build.
 
-Download and unzip the appropriate binary and place it in your `$PATH`.
+!!!tip "You can also [downgrade to an older version of DDEV](../users/usage/faq.md#how-can-i-install-a-specific-version-of-ddev) (perform a rollback)."
 
-### Homebrew with macOS or Linux
+Normally, you can put any executable in your path, and it takes precedence, so you don't need to remove or disable an already installed DDEV instance, which we will use here. This example uses `~/bin`. Since not every OS has `$HOME/bin` in `$PATH`, you can create the folder and add it to your path by updating `~/.bashrc`, `~/.zshrc`, or another relevant shell configuration file with these commands:
 
-If you’re using Homebrew, start by unlinking your current binary:
-
-```
-brew unlink ddev
-```
-
-Next, unzip the binary you downloaded, make it executable, and move it to your bin folder:
-
-```
-unzip ddev.zip
-chmod +x ddev && sudo mv ddev /usr/local/bin/ddev
+```bash
+mkdir ~/bin
+echo 'export PATH="$HOME/bin:$PATH"' >>~/.bashrc
+source ~/.bashrc
+# Verify that `$HOME/bin` is the first entry in your `$PATH`
+echo $PATH
 ```
 
-Verify the replacement worked by running `ddev -v`. The output should be something like `ddev version v1.22.5-alpha1-70-g0852fc2df`, instead of the regular `ddev version v1.22.5`.
+Download a ZIP file for your OS and architecture by clicking the link (the result is something like `ddev-macos-arm64.zip`) or using `wget`, `curl`, `dl` and unzip it, make it executable, and move it to the `~/bin` folder:
 
-!!!tip "macOS and Unsigned Binaries"
+```bash
+# Example for macOS Apple Silicon:
+unzip ddev-macos-arm64.zip
+chmod +x ddev && mv ddev ~/bin/ddev
+rm ddev-macos-arm64.zip
+```
+
+![Github Action PR Comment ZIP files](../images/github-action-pr-comment.png)
+
+Tip: If you need a zip-file to try out the "Testing a PR" process, see the [nightly builds](https://nightly.link/ddev/ddev/workflows/master-build/master).
+
+???warning "macOS and Unsigned Binaries (click me)"
     macOS doesn’t like these downloaded binaries, so you’ll need to bypass the automatic quarantine to use them:
 
-    ```
-    xattr -r -d com.apple.quarantine /usr/local/bin/ddev
+    ```bash
+    xattr -r -d com.apple.quarantine ~/bin/ddev
     ```
 
     (The binaries on the master branch and the final release binaries _are_ signed.)
 
-You do not typically have to install anything else other than the downloaded binary; when you run it it will access any Docker images that it needs.
+Verify the replacement worked by running `ddev -v`. The output should be something like `ddev version v1.23.5-98-g3c93ae87e`, instead of the regular `ddev version v1.23.5`. Valuable commands for debugging are `which -a ddev` and `echo $PATH`.
 
-After you’re done, you can delete your downloaded binary and re-link the original Homebrew one:
-
-```
-sudo rm /usr/local/bin/ddev
-brew link --force ddev
-```
-
-### Installing a Downloaded Binary in the `$PATH`
-
-Normally, you can put any executable in your path, and it takes precedence, so you don't need to remove or disable an already installed DDEV instance, which we will use here. This example uses `~/bin`. `echo $PATH` and `which ddev` are valuable commands for debugging. Since not every distro has `~/bin` in `$PATH`, you can create the folder and add it to your path in `~/.bashrc` with these commands:
-
-```
-mkdir -p ~/bin
-export PATH="~/bin:$PATH"
-```
-
-Next, unzip the ZIP file you downloaded, make it executable, and move it to a folder in your path. Check with `echo $PATH`:
-
-```
-unzip ddev.zip
-chmod +x ddev && mv ddev ~/bin
-```
-
-Now, close and reopen your terminal, and verify the replacement worked by running `ddev version`. The output should be something like `DDEV version v1.22.3-39-gfbb878843`, instead of the regular `DDEV version v1.22.3`.
-
-You need to run `ddev poweroff` and `ddev start` to download the Docker images that it needs.
+When DDEV detects a version change, it recommends [powering down](../users/usage/commands.md#poweroff) all running containers. Then, it will download the new images, if required.
 
 After you’re done testing, you can delete your downloaded executable, restart your terminal, and again use the standard DDEV:
 
-```
+```bash
 rm ~/bin/ddev
 ```
 
@@ -90,16 +78,16 @@ To get started use the button below:
 
 [![Open in Gitpod](https://gitpod.io/button/open-in-gitpod.svg)](https://gitpod.io/#https://github.com/ddev/ddev)
 
-For a simple test, edit `r/cmd/ddev/cmd/start.go` and change the line
+For a simple test, edit `cmd/ddev/cmd/start.go` and change the line
 
 ```go
-    output.UserOut.Printf("Starting %s...", project.GetName())
+output.UserOut.Printf("Starting %s...", project.GetName())
 ```
 
 to
 
 ```go
-    output.UserOut.Printf("Let's gooooo ... %s...", project.GetName())
+output.UserOut.Printf("Let's gooooo ... %s...", project.GetName())
 ```
 
 Compile and install your new modified DDEV version:
@@ -109,7 +97,7 @@ cd /workspace/ddev/
 make
 ```
 
-The command `ddev -v` now will output something like `ddev version v1.23.1-20-g70fc4cd7b-dirty`. The version will stay the same for all compilations until you make a commit.
+The command `ddev -v` now will output something like `ddev version v1.23.5-98-g3c93ae87e-dirty`. The version will stay the same for all compilations until you make a commit.
 
 A Gitpod dummy project for is provided by default in `/workspace/d10simple` to test your changes:
 
@@ -131,7 +119,7 @@ ddev config
 
 If you want to use an existing web project, also check it out into `/workspace/<yourproject>` and use it as usual.
 
-The things you’re familiar with work normally, except that `ddev-router` does not run.  
+The things you’re familiar with work normally, except that `ddev-router` does not run.
 
 ## Making Changes to DDEV Images
 
@@ -155,16 +143,12 @@ make
 
 It’s easiest to do this using Gitpod (see above) because Gitpod already has `docker buildx` all set up for you and the built DDEV binary is in the `$PATH`.
 
-## Pull Requests and PR Preparation
-
-When preparing your pull request, please use a branch name like `YYYYMMDD_<your_username>_short_description` (like `20230901_rfay_short_description`) so it’s easy to identify you as the author.
-
 ## Docker Image Changes
 
 If you make changes to a Docker image (like `ddev-webserver`), it won’t have any effect unless you:
 
 * Push an image with a specific tag by navigating to the image directory (like `containers/ddev-webserver`), and running `make push DOCKER_REPO=youruser/yourimage VERSION=<branchname>`.
-* Multi-arch images require you to have a Buildx builder, so `docker buildx create --name ddev-builder-multi --use`.
+* Multi-arch images require you to have a Buildx builder, so `docker buildx use multi-arch-builder || docker buildx create --name multi-arch-builder --use`.
 * You can’t push until you `docker login`.
 * Push a container to hub.docker.com. Push with the tag that matches your branch. Push to `<yourorg>/ddev-webserver` repository with `make push DOCKER_ORG=<yourorg> VERSION=<branchname>` **in the container directory**. You might have to use other techniques to push to another repository.
 * Update `pkg/versionconstants/versionconstants.go` with the `WebImg` and `WebTag` that relate to the Docker image you pushed.
@@ -173,7 +157,7 @@ If you make changes to a Docker image (like `ddev-webserver`), it won’t have a
 
 To use `buildx` successfully you have to have the [`buildx` Docker plugin](https://docs.docker.com/buildx/working-with-buildx/), which is in many environments by default.
 
-To build multi-platform images you must `docker buildx create --use` as a one-time initialization.
+To build multi-platform images you must `docker buildx use multi-arch-builder || docker buildx create --name multi-arch-builder --use` as a one-time initialization.
 
 * If you want to work locally with a quick build for your architecture, you can:
     * `make VERSION=<version>`
@@ -188,7 +172,7 @@ make push VERSION=<tag>
 
 If you’re pushing to a repository other than the one wired into the Makefile (like `ddev/ddev-webserver`):
 
-```
+```bash
 cd containers/ddev-webserver
 make push VERSION=<tag> DOCKER_REPO=your/dockerrepo
 ```
@@ -298,7 +282,7 @@ You can add additional `go build` args with `make BUILDARGS=<something>`, for ex
 
 Build/test/check static analysis with:
 
-```
+```bash
 make # Builds on current os/architecture
 make BUILDARGS=-race
 make linux_amd64
@@ -336,27 +320,31 @@ The Buildkite automated tests require special access, which we typically grant t
 
 The Docker images that DDEV uses are included in the `containers/` directory:
 
+* `containers/ddev-gitpod-base` is the image used in GitPod by [ddev-gitpod-launcher](https://github.com/ddev/ddev-gitpod-launcher)
 * `containers/ddev-php-base` the base build for `ddev-webserver`.
 * `containers/ddev-webserver` provides the web servers for per-project `web` containers.
 * `containers/ddev-dbserver` provides the `db` container for per-project databases.
-* `containers/ddev-nginx-proxy-router` is the (deprecated) the nginx-proxy router image.
 * `containers/ddev-ssh-agent` provides a single in-Docker-network SSH agent so projects can use your SSH keys.
 * `containers/ddev-traefik-router` is the current Traefik-based router image.
 
 When changes are made to an image, they have to be temporarily pushed to a tag—ideally with the same as the branch name of the PR—and the tag updated in `pkg/versionconstants/versionconstants.go`. Please ask if you need a container pushed to support a pull request.
 
-## Pull Request Pro Tips
+## Pull Requests
+
+To contribute your fixes or improvements to DDEV, make a pull request on GitHub. If you're undertaking a large change, create an issue first so it can be discussed before you invest a lot of time. When you're ready, create a pull request, and a discussion will start around your proposed changes. Other contributors and users may chime in, but ultimately the decision is made by the maintainer(s). You may be asked to make some changes to your pull request. If so, add more commits to your branch and push them. They’ll automatically go into the existing pull request.
+
+If your pull request is merged, great! If not, no sweat; it may not be what the project maintainer had in mind, or they were already working on it. This happens, so our recommendation is to take any feedback you’ve received and go forth and pull request again. Or create your own open source project.
+
+### Preparing a pull request
 
 * **[Fork](https://docs.github.com/en/get-started/quickstart/contributing-to-projects) the repository** and clone it locally. Connect your local to the original ‘upstream’ repository by adding it as a remote, and pull upstream changes often so you stay up to date and reduce the likelihood of conflicts when you submit your pull request. See more detailed instructions [here](https://help.github.com/articles/syncing-a-fork).
-* **Create a [branch](https://docs.github.com/en/get-started/quickstart/github-flow)** for your edits.
+* **Create a [branch](https://docs.github.com/en/get-started/quickstart/github-flow)** for your edits. See below for DDEV's conventions for branch names.
 * **Be clear** about the problem and how someone can recreate it, or why your feature will help. Be equally clear about the steps you took to make your changes.
 * **It’s best to test**. Run your changes against any existing tests and create new tests when needed. Whether tests exist or not, make sure your changes don’t break the existing project.
 
-## Open Pull Requests
+### Feature branch name
 
-Once you’ve opened a pull request, a discussion will start around your proposed changes. Other contributors and users may chime in, but ultimately the decision is made by the maintainer(s). You may be asked to make some changes to your pull request. If so, add more commits to your branch and push them. They’ll automatically go into the existing pull request.
-
-If your pull request is merged, great! If not, no sweat; it may not be what the project maintainer had in mind, or they were already working on it. This happens, so our recommendation is to take any feedback you’ve received and go forth and pull request again. Or create your own open source project.
+When preparing your pull request, please use a branch name like `YYYYMMDD_<your_username>_short_description` (like `20230901_rfay_short_description`) so it’s easy to identify you as the author.
 
 ### Pull Request Title Guidelines
 
